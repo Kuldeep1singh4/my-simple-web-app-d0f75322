@@ -7,7 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Play, Pause, StepForward, StepBack, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { traceCode, type TraceStep } from "@/lib/trace.functions";
+import { traceCode, type TraceStep, type JsonValue } from "@/lib/trace.functions";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_CODE = `let total = 0;
@@ -45,7 +45,7 @@ const lineTheme = EditorView.baseTheme({
   },
 });
 
-function VariableCard({ name, value }: { name: string; value: unknown }) {
+function VariableCard({ name, value }: { name: string; value: JsonValue }) {
   const display = useMemo(() => {
     if (value === null) return "null";
     if (value === undefined) return "undefined";

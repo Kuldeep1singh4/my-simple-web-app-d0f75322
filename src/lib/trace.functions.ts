@@ -5,9 +5,17 @@ const InputSchema = z.object({
   code: z.string().min(1).max(20000),
 });
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [k: string]: JsonValue };
+
 export type TraceStep = {
   line: number;
-  variables: Record<string, unknown>;
+  variables: { [k: string]: JsonValue };
   explanation: string;
 };
 
