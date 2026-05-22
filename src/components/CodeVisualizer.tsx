@@ -71,9 +71,9 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
   return (
     <Card
       className={cn(
-        "p-3 transition-all duration-500 border",
+        "p-3 border transition-all duration-700 ease-out",
         flash
-          ? "bg-primary/15 border-primary scale-[1.02] shadow-lg shadow-primary/20"
+          ? "bg-[oklch(0.85_0.18_140)] border-[oklch(0.7_0.2_140)] scale-[1.04] shadow-lg shadow-[oklch(0.7_0.2_140/0.4)]"
           : "bg-card border-border"
       )}
     >
