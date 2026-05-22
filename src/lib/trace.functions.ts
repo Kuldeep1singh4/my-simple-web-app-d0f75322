@@ -43,7 +43,7 @@ export const traceCode = createServerFn({ method: "POST" })
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "llama3-8b-8192",
+          model: "llama-3.3-70b-versatile",
           temperature: 0.2,
           response_format: { type: "json_object" },
           messages: [
