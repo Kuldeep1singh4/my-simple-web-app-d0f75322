@@ -63,7 +63,7 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
     if (prev.current !== display) {
       setFlash(true);
       prev.current = display;
-      const t = setTimeout(() => setFlash(false), 600);
+      const t = setTimeout(() => setFlash(false), 900);
       return () => clearTimeout(t);
     }
   }, [display]);
@@ -71,9 +71,9 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
   return (
     <Card
       className={cn(
-        "p-3 transition-all duration-500 border",
+        "p-3 border transition-all duration-700 ease-out",
         flash
-          ? "bg-primary/15 border-primary scale-[1.02] shadow-lg shadow-primary/20"
+          ? "bg-[oklch(0.85_0.18_140)] border-[oklch(0.7_0.2_140)] scale-[1.04] shadow-lg shadow-[oklch(0.7_0.2_140/0.4)]"
           : "bg-card border-border"
       )}
     >
@@ -114,7 +114,7 @@ export function CodeVisualizer() {
       setPlaying(false);
       return;
     }
-    const t = setTimeout(() => setIdx((i) => i + 1), 1100);
+    const t = setTimeout(() => setIdx((i) => Math.min(i + 1, steps.length - 1)), 1500);
     return () => clearTimeout(t);
   }, [playing, idx, steps.length]);
 
