@@ -48,7 +48,7 @@ export const traceCode = createServerFn({ method: "POST" })
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: data.code },
+            { role: "user", content: `Trace this code and respond with JSON as instructed:\n\n${data.code}` },
           ],
         }),
       });
@@ -56,7 +56,23 @@ export const traceCode = createServerFn({ method: "POST" })
       if (!res.ok) {
         const text = await res.text();
         console.error("Groq error", res.status, text);
-        return { steps: [], error: `Groq API error (${res.status})` };
+        let detail = text;
+        try {
+          const parsedErr = JSON.parse(text) as {
+            error?: { message?: string } | string;
+            message?: string;
+          };
+          if (typeof parsedErr.error === "object" && parsedErr.error?.message) {
+            detail = parsedErr.error.message;
+          } else if (typeof parsedErr.error === "string") {
+            detail = parsedErr.error;
+          } else if (parsedErr.message) {
+            detail = parsedErr.message;
+          }
+        } catch {
+          // keep raw text
+        }
+        return { steps: [], error: `Groq API error (${res.status}): ${detail}` };
       }
 
       const json = (await res.json()) as {
