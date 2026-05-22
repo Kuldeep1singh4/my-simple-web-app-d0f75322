@@ -63,7 +63,7 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
     if (prev.current !== display) {
       setFlash(true);
       prev.current = display;
-      const t = setTimeout(() => setFlash(false), 600);
+      const t = setTimeout(() => setFlash(false), 900);
       return () => clearTimeout(t);
     }
   }, [display]);
