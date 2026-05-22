@@ -114,7 +114,7 @@ export function CodeVisualizer() {
       setPlaying(false);
       return;
     }
-    const t = setTimeout(() => setIdx((i) => i + 1), 1100);
+    const t = setTimeout(() => setIdx((i) => Math.min(i + 1, steps.length - 1)), 1500);
     return () => clearTimeout(t);
   }, [playing, idx, steps.length]);
 
