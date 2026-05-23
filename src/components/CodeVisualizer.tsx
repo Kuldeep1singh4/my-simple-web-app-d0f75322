@@ -348,11 +348,6 @@ export function CodeVisualizer() {
     <div className="flex flex-col md:flex-row h-screen w-full bg-background text-foreground">
       {/* Editor */}
       <div className="flex flex-col w-full md:w-1/2 h-[40vh] md:h-full border-b md:border-b-0 md:border-r border-border">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <h1 className="font-semibold">Code Visualizer</h1>
-          </div>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50 gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="h-4 w-4 text-primary shrink-0" />
