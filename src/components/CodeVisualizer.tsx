@@ -380,6 +380,7 @@ export function CodeVisualizer() {
         </div>
 
         {/* Controls */}
+        {!traceError && (
         <div className="border-t border-border bg-card/50 p-3 flex items-center justify-center gap-2">
           <Button
             variant="outline"
