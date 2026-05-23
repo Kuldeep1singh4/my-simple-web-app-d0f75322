@@ -329,7 +329,25 @@ export function CodeVisualizer() {
             </Card>
           )}
 
-          {!error && steps.length === 0 && !loading && (
+          {traceError && (
+            <Card className="p-4 border-2 border-destructive bg-destructive/10">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-destructive/20 text-destructive flex items-center justify-center font-bold text-lg shrink-0">
+                  !
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-destructive font-bold mb-1">
+                    Syntax Error
+                  </div>
+                  <div className="text-sm text-destructive font-mono leading-relaxed break-words">
+                    {traceError}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {!error && !traceError && steps.length === 0 && !loading && (
             <div className="h-full flex items-center justify-center text-center text-muted-foreground text-sm">
               <div>
                 Write some code and click <span className="text-primary font-medium">Visualize</span>{" "}
