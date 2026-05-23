@@ -445,6 +445,38 @@ export function CodeVisualizer() {
             </Card>
           )}
 
+          {complexity && (
+            <Card className="p-4 bg-gradient-to-br from-primary/10 via-card to-card border-primary/30">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
+                Complexity Analysis
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Time
+                    </span>
+                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
+                      {complexity.time}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Space
+                    </span>
+                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
+                      {complexity.space}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {Object.keys(variables).length > 0 && (
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
