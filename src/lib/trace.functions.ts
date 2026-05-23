@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const InputSchema = z.object({
   code: z.string().min(1).max(20000),
+  language: z.enum(["javascript", "python", "java", "c", "cpp"]).default("javascript"),
 });
 
 export type JsonValue =
@@ -19,21 +20,27 @@ export type TraceStep = {
   explanation: string;
 };
 
+export type Complexity = {
+  time: string;
+  space: string;
+};
+
 export type TraceResult = {
   steps: TraceStep[];
+  complexity: Complexity | null;
   error: string | null;
   traceError: string | null;
 };
 
 const SYSTEM_PROMPT =
-  'You are a code execution tracer. First, check the code for syntax errors. If invalid, return ONLY: {"error": "Brief syntax error message"}. If valid, trace execution up to a strict maximum of 50 steps to prevent infinite loops. If execution exceeds 50 steps, append a final step with the explanation \'Execution stopped: Infinite loop or excessive steps detected.\' Return a JSON object with a \'steps\' array. Each object needs: \'line\' (integer), \'variables\' (object mapping names to values), and \'explanation\' (1-sentence beginner-friendly explanation). Return raw JSON only.';
+  'You are a code execution tracer. First, check the code for syntax errors. If invalid, return ONLY JSON: {"error": "Brief syntax error message"}. If valid, trace execution up to a strict maximum of 50 steps to prevent infinite loops. If execution exceeds 50 steps, append a final step with the explanation \'Execution stopped: Infinite loop or excessive steps detected.\' Also analyze the overall code and include a complexity object with Big-O notation. Return a JSON object with: \'steps\' (array, each item: \'line\' integer, \'variables\' object mapping names to values, \'explanation\' 1-sentence beginner-friendly explanation), and \'complexity\' (object: {"time": "O(...)", "space": "O(...)"}). Return raw JSON only.';
 
 export const traceCode = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
   .handler(async ({ data }): Promise<TraceResult> => {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return { steps: [], error: "GROQ_API_KEY is not configured.", traceError: null };
+      return { steps: [], complexity: null, error: "GROQ_API_KEY is not configured.", traceError: null };
     }
 
     try {
@@ -49,7 +56,10 @@ export const traceCode = createServerFn({ method: "POST" })
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: `Trace this code and respond with JSON as instructed:\n\n${data.code}` },
+            {
+              role: "user",
+              content: `Language: ${data.language}\n\nTrace this code and respond with JSON as instructed:\n\n${data.code}`,
+            },
           ],
         }),
       });
@@ -73,14 +83,19 @@ export const traceCode = createServerFn({ method: "POST" })
         } catch {
           // keep raw text
         }
-        return { steps: [], error: `Groq API error (${res.status}): ${detail}`, traceError: null };
+        return {
+          steps: [],
+          complexity: null,
+          error: `Groq API error (${res.status}): ${detail}`,
+          traceError: null,
+        };
       }
 
       const json = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
       };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: { steps?: TraceStep[]; error?: string };
+      let parsed: { steps?: TraceStep[]; error?: string; complexity?: Complexity };
       try {
         parsed = JSON.parse(content);
       } catch {
@@ -88,12 +103,16 @@ export const traceCode = createServerFn({ method: "POST" })
         parsed = match ? JSON.parse(match[0]) : {};
       }
       if (typeof parsed.error === "string" && !Array.isArray(parsed.steps)) {
-        return { steps: [], error: null, traceError: parsed.error };
+        return { steps: [], complexity: null, error: null, traceError: parsed.error };
       }
       const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
-      return { steps, error: null, traceError: null };
+      const complexity =
+        parsed.complexity && typeof parsed.complexity.time === "string" && typeof parsed.complexity.space === "string"
+          ? parsed.complexity
+          : null;
+      return { steps, complexity, error: null, traceError: null };
     } catch (err) {
       console.error("Trace failed", err);
-      return { steps: [], error: "Failed to reach the tracer service.", traceError: null };
+      return { steps: [], complexity: null, error: "Failed to reach the tracer service.", traceError: null };
     }
   });

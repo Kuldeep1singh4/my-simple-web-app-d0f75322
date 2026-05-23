@@ -1,21 +1,80 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import { java } from "@codemirror/lang-java";
+import { cpp } from "@codemirror/lang-cpp";
 import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
-import { StateField, StateEffect } from "@codemirror/state";
+import { StateField, StateEffect, type Extension } from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
-import { Play, Pause, StepForward, StepBack, Sparkles, Loader2 } from "lucide-react";
+import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Clock, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { traceCode, type TraceStep, type JsonValue } from "@/lib/trace.functions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { traceCode, type TraceStep, type JsonValue, type Complexity } from "@/lib/trace.functions";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_CODE = `let total = 0;
+type Language = "javascript" | "python" | "java" | "c" | "cpp";
+
+const LANGUAGE_LABELS: Record<Language, string> = {
+  javascript: "JavaScript",
+  python: "Python",
+  java: "Java",
+  c: "C",
+  cpp: "C++",
+};
+
+const DEFAULT_CODE: Record<Language, string> = {
+  javascript: `let total = 0;
 for (let i = 1; i <= 3; i++) {
   total = total + i;
 }
 const result = total * 2;
-`;
+`,
+  python: `total = 0
+for i in range(1, 4):
+    total = total + i
+result = total * 2
+`,
+  java: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+  c: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+  cpp: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+};
+
+function languageExtension(lang: Language): Extension {
+  switch (lang) {
+    case "python":
+      return python();
+    case "java":
+      return java();
+    case "c":
+    case "cpp":
+      return cpp();
+    default:
+      return javascript();
+  }
+}
 
 // CodeMirror highlight extension for the active line
 const setActiveLine = StateEffect.define<number | null>();
@@ -217,8 +276,12 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
 }
 
 export function CodeVisualizer() {
-  const [code, setCode] = useState(DEFAULT_CODE);
+  const [language, setLanguage] = useState<Language>("javascript");
+  const [codeByLang, setCodeByLang] = useState<Record<Language, string>>(DEFAULT_CODE);
+  const code = codeByLang[language];
+  const setCode = (v: string) => setCodeByLang((prev) => ({ ...prev, [language]: v }));
   const [steps, setSteps] = useState<TraceStep[]>([]);
+  const [complexity, setComplexity] = useState<Complexity | null>(null);
   const [idx, setIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,18 +315,21 @@ export function CodeVisualizer() {
     setLoading(true);
     setError(null);
     setTraceError(null);
+    setComplexity(null);
     setPlaying(false);
     setIdx(-1);
     try {
-      const res = await trace({ data: { code } });
+      const res = await trace({ data: { code, language } });
       if (res.error) {
         setError(res.error);
         setSteps([]);
       } else if (res.traceError) {
         setTraceError(res.traceError);
         setSteps([]);
+        setComplexity(res.complexity);
       } else {
         setSteps(res.steps);
+        setComplexity(res.complexity);
         setIdx(res.steps.length > 0 ? 0 : -1);
       }
     } catch (e) {
@@ -282,27 +348,41 @@ export function CodeVisualizer() {
     <div className="flex flex-col md:flex-row h-screen w-full bg-background text-foreground">
       {/* Editor */}
       <div className="flex flex-col w-full md:w-1/2 h-[40vh] md:h-full border-b md:border-b-0 md:border-r border-border">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <h1 className="font-semibold">Code Visualizer</h1>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <h1 className="font-semibold truncate">Code Visualizer</h1>
           </div>
-          <Button size="sm" onClick={handleVisualize} disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Tracing…
-              </>
-            ) : (
-              "Visualize"
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="Language">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(LANGUAGE_LABELS) as Language[]).map((l) => (
+                  <SelectItem key={l} value={l} className="text-xs">
+                    {LANGUAGE_LABELS[l]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={handleVisualize} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Tracing…
+                </>
+              ) : (
+                "Visualize"
+              )}
+            </Button>
+          </div>
         </div>
         <div className="flex-1 overflow-auto">
           <CodeMirror
             value={code}
             onChange={setCode}
             theme="dark"
-            extensions={[javascript(), activeLineField, lineTheme]}
+            extensions={[languageExtension(language), activeLineField, lineTheme]}
             basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
             onCreateEditor={(view) => {
               editorRef.current = view;
@@ -362,6 +442,38 @@ export function CodeVisualizer() {
                 Line {current.line}
               </div>
               <div className="text-sm leading-relaxed">{current.explanation}</div>
+            </Card>
+          )}
+
+          {complexity && (
+            <Card className="p-4 bg-gradient-to-br from-primary/10 via-card to-card border-primary/30">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
+                Complexity Analysis
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Time
+                    </span>
+                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
+                      {complexity.time}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Space
+                    </span>
+                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
+                      {complexity.space}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </Card>
           )}
 
