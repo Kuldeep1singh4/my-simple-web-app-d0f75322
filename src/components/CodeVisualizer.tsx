@@ -1,21 +1,80 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import { java } from "@codemirror/lang-java";
+import { cpp } from "@codemirror/lang-cpp";
 import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
-import { StateField, StateEffect } from "@codemirror/state";
+import { StateField, StateEffect, type Extension } from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
-import { Play, Pause, StepForward, StepBack, Sparkles, Loader2 } from "lucide-react";
+import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Clock, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { traceCode, type TraceStep, type JsonValue } from "@/lib/trace.functions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { traceCode, type TraceStep, type JsonValue, type Complexity } from "@/lib/trace.functions";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_CODE = `let total = 0;
+type Language = "javascript" | "python" | "java" | "c" | "cpp";
+
+const LANGUAGE_LABELS: Record<Language, string> = {
+  javascript: "JavaScript",
+  python: "Python",
+  java: "Java",
+  c: "C",
+  cpp: "C++",
+};
+
+const DEFAULT_CODE: Record<Language, string> = {
+  javascript: `let total = 0;
 for (let i = 1; i <= 3; i++) {
   total = total + i;
 }
 const result = total * 2;
-`;
+`,
+  python: `total = 0
+for i in range(1, 4):
+    total = total + i
+result = total * 2
+`,
+  java: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+  c: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+  cpp: `int total = 0;
+for (int i = 1; i <= 3; i++) {
+  total = total + i;
+}
+int result = total * 2;
+`,
+};
+
+function languageExtension(lang: Language): Extension {
+  switch (lang) {
+    case "python":
+      return python();
+    case "java":
+      return java();
+    case "c":
+    case "cpp":
+      return cpp();
+    default:
+      return javascript();
+  }
+}
 
 // CodeMirror highlight extension for the active line
 const setActiveLine = StateEffect.define<number | null>();
