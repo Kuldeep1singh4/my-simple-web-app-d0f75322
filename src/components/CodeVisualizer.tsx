@@ -45,17 +45,135 @@ const lineTheme = EditorView.baseTheme({
   },
 });
 
+function formatPrimitive(value: JsonValue): string {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string") return `"${value}"`;
+  return String(value);
+}
+
+function isPlainObject(v: JsonValue): v is { [k: string]: JsonValue } {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function isLinkedNode(v: JsonValue): v is { [k: string]: JsonValue } {
+  return isPlainObject(v) && "next" in v;
+}
+
+function isTreeNode(v: JsonValue): v is { [k: string]: JsonValue } {
+  return isPlainObject(v) && ("left" in v || "right" in v);
+}
+
+function ArrayView({ value }: { value: JsonValue[] }) {
+  return (
+    <div className="flex flex-wrap gap-0 overflow-x-auto pb-1">
+      {value.map((item, i) => (
+        <div key={i} className="flex flex-col items-center">
+          <div
+            className={cn(
+              "min-w-12 px-3 py-2 font-mono text-sm text-center bg-card border border-border",
+              i === 0 && "rounded-l-md",
+              i === value.length - 1 && "rounded-r-md border-r",
+              i > 0 && "border-l-0"
+            )}
+          >
+            {formatPrimitive(item)}
+          </div>
+          <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{i}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LinkedNodeBlock({ node }: { node: { [k: string]: JsonValue } }) {
+  const valueKey = Object.keys(node).find((k) => k !== "next");
+  const display = valueKey ? formatPrimitive(node[valueKey]) : "{…}";
+  return (
+    <div className="px-3 py-2 rounded-md bg-card border border-border font-mono text-sm whitespace-nowrap">
+      {display}
+    </div>
+  );
+}
+
+function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
+  const nodes: { [k: string]: JsonValue }[] = [];
+  let cur: JsonValue = head;
+  let guard = 0;
+  while (isLinkedNode(cur) && guard < 50) {
+    nodes.push(cur);
+    cur = cur.next;
+    guard++;
+  }
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+      {nodes.map((n, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <LinkedNodeBlock node={n} />
+          <span className="text-primary font-mono text-lg">→</span>
+        </div>
+      ))}
+      <span className="font-mono text-xs text-muted-foreground">
+        {cur === null ? "null" : "…"}
+      </span>
+    </div>
+  );
+}
+
+function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
+  const valueKey = Object.keys(node).find((k) => k !== "left" && k !== "right");
+  const display = valueKey ? formatPrimitive(node[valueKey]) : "•";
+  const left = node.left;
+  const right = node.right;
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="px-3 py-1.5 rounded-md bg-card border border-primary/40 font-mono text-sm">
+        {display}
+      </div>
+      {(isTreeNode(left) || isTreeNode(right) || isPlainObject(left) || isPlainObject(right)) && (
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-center">
+            <div className="text-[10px] text-muted-foreground font-mono">L</div>
+            {isPlainObject(left) ? (
+              <TreeView node={left} />
+            ) : (
+              <div className="text-xs font-mono text-muted-foreground">
+                {left === undefined ? "—" : formatPrimitive(left as JsonValue)}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="text-[10px] text-muted-foreground font-mono">R</div>
+            {isPlainObject(right) ? (
+              <TreeView node={right} />
+            ) : (
+              <div className="text-xs font-mono text-muted-foreground">
+                {right === undefined ? "—" : formatPrimitive(right as JsonValue)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VariableCard({ name, value }: { name: string; value: JsonValue }) {
+  const isArray = Array.isArray(value);
+  const isTree = isTreeNode(value);
+  const isLinked = !isTree && isLinkedNode(value);
+  const isSpecial = isArray || isTree || isLinked;
+
   const display = useMemo(() => {
-    if (value === null) return "null";
-    if (value === undefined) return "undefined";
-    if (typeof value === "string") return `"${value}"`;
+    if (isSpecial) return JSON.stringify(value);
     try {
-      return typeof value === "object" ? JSON.stringify(value) : String(value);
+      return typeof value === "object" && value !== null
+        ? JSON.stringify(value)
+        : formatPrimitive(value);
     } catch {
       return String(value);
     }
-  }, [value]);
+  }, [value, isSpecial]);
 
   const [flash, setFlash] = useState(false);
   const prev = useRef(display);
@@ -72,16 +190,27 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
     <Card
       className={cn(
         "p-3 border transition-all duration-700 ease-out",
+        isSpecial ? "col-span-2 sm:col-span-3" : "",
         flash
-          ? "bg-[oklch(0.85_0.18_140)] border-[oklch(0.7_0.2_140)] scale-[1.04] shadow-lg shadow-[oklch(0.7_0.2_140/0.4)]"
+          ? "bg-[oklch(0.85_0.18_140)] border-[oklch(0.7_0.2_140)] scale-[1.02] shadow-lg shadow-[oklch(0.7_0.2_140/0.4)]"
           : "bg-card border-border"
       )}
     >
       <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
         {name}
       </div>
-      <div className="mt-1 font-mono text-lg font-semibold text-foreground break-all">
-        {display}
+      <div className="mt-2 font-mono text-foreground break-all">
+        {isArray ? (
+          <ArrayView value={value as JsonValue[]} />
+        ) : isTree ? (
+          <div className="overflow-x-auto">
+            <TreeView node={value as { [k: string]: JsonValue }} />
+          </div>
+        ) : isLinked ? (
+          <LinkedListView head={value as { [k: string]: JsonValue }} />
+        ) : (
+          <span className="text-lg font-semibold">{display}</span>
+        )}
       </div>
     </Card>
   );
