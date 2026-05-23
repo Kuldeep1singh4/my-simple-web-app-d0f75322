@@ -22,17 +22,18 @@ export type TraceStep = {
 export type TraceResult = {
   steps: TraceStep[];
   error: string | null;
+  traceError: string | null;
 };
 
 const SYSTEM_PROMPT =
-  "You are a code execution tracer. Analyze the user's code. Return a JSON object with a single key 'steps' containing an array of objects. Each object represents one execution step and must have: 'line' (the integer line number executing), 'variables' (an object mapping current variable names to their values), and 'explanation' (a 1-sentence beginner-friendly explanation). Return raw JSON only.";
+  'You are a code execution tracer. First, check the code for syntax errors. If invalid, return ONLY: {"error": "Brief syntax error message"}. If valid, trace execution up to a strict maximum of 50 steps to prevent infinite loops. If execution exceeds 50 steps, append a final step with the explanation \'Execution stopped: Infinite loop or excessive steps detected.\' Return a JSON object with a \'steps\' array. Each object needs: \'line\' (integer), \'variables\' (object mapping names to values), and \'explanation\' (1-sentence beginner-friendly explanation). Return raw JSON only.';
 
 export const traceCode = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
   .handler(async ({ data }): Promise<TraceResult> => {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return { steps: [], error: "GROQ_API_KEY is not configured." };
+      return { steps: [], error: "GROQ_API_KEY is not configured.", traceError: null };
     }
 
     try {
@@ -72,25 +73,27 @@ export const traceCode = createServerFn({ method: "POST" })
         } catch {
           // keep raw text
         }
-        return { steps: [], error: `Groq API error (${res.status}): ${detail}` };
+        return { steps: [], error: `Groq API error (${res.status}): ${detail}`, traceError: null };
       }
 
       const json = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
       };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: { steps?: TraceStep[] };
+      let parsed: { steps?: TraceStep[]; error?: string };
       try {
         parsed = JSON.parse(content);
       } catch {
-        // Try to find JSON substring
         const match = content.match(/\{[\s\S]*\}/);
         parsed = match ? JSON.parse(match[0]) : {};
       }
+      if (typeof parsed.error === "string" && !Array.isArray(parsed.steps)) {
+        return { steps: [], error: null, traceError: parsed.error };
+      }
       const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
-      return { steps, error: null };
+      return { steps, error: null, traceError: null };
     } catch (err) {
       console.error("Trace failed", err);
-      return { steps: [], error: "Failed to reach the tracer service." };
+      return { steps: [], error: "Failed to reach the tracer service.", traceError: null };
     }
   });
