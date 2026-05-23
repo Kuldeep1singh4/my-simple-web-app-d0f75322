@@ -315,18 +315,21 @@ export function CodeVisualizer() {
     setLoading(true);
     setError(null);
     setTraceError(null);
+    setComplexity(null);
     setPlaying(false);
     setIdx(-1);
     try {
-      const res = await trace({ data: { code } });
+      const res = await trace({ data: { code, language } });
       if (res.error) {
         setError(res.error);
         setSteps([]);
       } else if (res.traceError) {
         setTraceError(res.traceError);
         setSteps([]);
+        setComplexity(res.complexity);
       } else {
         setSteps(res.steps);
+        setComplexity(res.complexity);
         setIdx(res.steps.length > 0 ? 0 : -1);
       }
     } catch (e) {
