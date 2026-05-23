@@ -33,7 +33,7 @@ export const traceCode = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<TraceResult> => {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return { steps: [], error: "GROQ_API_KEY is not configured." };
+      return { steps: [], error: "GROQ_API_KEY is not configured.", traceError: null };
     }
 
     try {
