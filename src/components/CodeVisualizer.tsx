@@ -353,22 +353,41 @@ export function CodeVisualizer() {
             <Sparkles className="h-4 w-4 text-primary" />
             <h1 className="font-semibold">Code Visualizer</h1>
           </div>
-          <Button size="sm" onClick={handleVisualize} disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Tracing…
-              </>
-            ) : (
-              "Visualize"
-            )}
-          </Button>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <h1 className="font-semibold truncate">Code Visualizer</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
+              <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="Language">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(LANGUAGE_LABELS) as Language[]).map((l) => (
+                  <SelectItem key={l} value={l} className="text-xs">
+                    {LANGUAGE_LABELS[l]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={handleVisualize} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Tracing…
+                </>
+              ) : (
+                "Visualize"
+              )}
+            </Button>
+          </div>
         </div>
         <div className="flex-1 overflow-auto">
           <CodeMirror
             value={code}
             onChange={setCode}
             theme="dark"
-            extensions={[javascript(), activeLineField, lineTheme]}
+            extensions={[languageExtension(language), activeLineField, lineTheme]}
             basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
             onCreateEditor={(view) => {
               editorRef.current = view;
