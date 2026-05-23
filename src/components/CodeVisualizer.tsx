@@ -222,6 +222,7 @@ export function CodeVisualizer() {
   const [idx, setIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [traceError, setTraceError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const editorRef = useRef<EditorView | null>(null);
   const trace = useServerFn(traceCode);
@@ -250,12 +251,16 @@ export function CodeVisualizer() {
   const handleVisualize = async () => {
     setLoading(true);
     setError(null);
+    setTraceError(null);
     setPlaying(false);
     setIdx(-1);
     try {
       const res = await trace({ data: { code } });
       if (res.error) {
         setError(res.error);
+        setSteps([]);
+      } else if (res.traceError) {
+        setTraceError(res.traceError);
         setSteps([]);
       } else {
         setSteps(res.steps);
