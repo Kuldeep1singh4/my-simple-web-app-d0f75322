@@ -73,25 +73,27 @@ export const traceCode = createServerFn({ method: "POST" })
         } catch {
           // keep raw text
         }
-        return { steps: [], error: `Groq API error (${res.status}): ${detail}` };
+        return { steps: [], error: `Groq API error (${res.status}): ${detail}`, traceError: null };
       }
 
       const json = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
       };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: { steps?: TraceStep[] };
+      let parsed: { steps?: TraceStep[]; error?: string };
       try {
         parsed = JSON.parse(content);
       } catch {
-        // Try to find JSON substring
         const match = content.match(/\{[\s\S]*\}/);
         parsed = match ? JSON.parse(match[0]) : {};
       }
+      if (typeof parsed.error === "string" && !Array.isArray(parsed.steps)) {
+        return { steps: [], error: null, traceError: parsed.error };
+      }
       const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
-      return { steps, error: null };
+      return { steps, error: null, traceError: null };
     } catch (err) {
       console.error("Trace failed", err);
-      return { steps: [], error: "Failed to reach the tracer service." };
+      return { steps: [], error: "Failed to reach the tracer service.", traceError: null };
     }
   });
