@@ -276,8 +276,12 @@ function VariableCard({ name, value }: { name: string; value: JsonValue }) {
 }
 
 export function CodeVisualizer() {
-  const [code, setCode] = useState(DEFAULT_CODE);
+  const [language, setLanguage] = useState<Language>("javascript");
+  const [codeByLang, setCodeByLang] = useState<Record<Language, string>>(DEFAULT_CODE);
+  const code = codeByLang[language];
+  const setCode = (v: string) => setCodeByLang((prev) => ({ ...prev, [language]: v }));
   const [steps, setSteps] = useState<TraceStep[]>([]);
+  const [complexity, setComplexity] = useState<Complexity | null>(null);
   const [idx, setIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
