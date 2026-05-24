@@ -222,8 +222,6 @@ function ArrayRow({
           <motion.div layout className="flex gap-1.5 overflow-x-auto pb-1">
             {value.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
-              const kind: ColorKind = isActive ? "default" : "default";
-              // active cells get the current action color; pulled via parent via CSS var override below
               return (
                 <motion.div
                   key={`${name}-${typeof item === "number" || typeof item === "string" ? item : i}-${i}`}
