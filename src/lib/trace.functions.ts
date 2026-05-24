@@ -14,10 +14,23 @@ export type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue };
 
+export type ActionType =
+  | "compare"
+  | "swap"
+  | "insert"
+  | "read"
+  | "write"
+  | "success"
+  | "error"
+  | "init"
+  | "return";
+
 export type TraceStep = {
   line: number;
   variables: { [k: string]: JsonValue };
   explanation: string;
+  activeVariables?: string[];
+  actionType?: ActionType | string;
 };
 
 export type Complexity = {
