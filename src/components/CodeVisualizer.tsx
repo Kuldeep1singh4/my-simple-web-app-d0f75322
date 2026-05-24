@@ -473,8 +473,7 @@ export function CodeVisualizer() {
 
   const current = idx >= 0 && idx < steps.length ? steps[idx] : null;
   const active = useMemo(() => parseActive(current?.activeVariables), [current]);
-  const kind = actionKind(current?.actionType);
-  const actionColor = COLORS[kind];
+  const actionColor = COLORS[actionKind(current?.actionType)];
 
   // CSS vars for active cells (used by ArrayRow children)
   const canvasStyle = {
