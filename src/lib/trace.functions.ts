@@ -33,7 +33,7 @@ export type TraceResult = {
 };
 
 const SYSTEM_PROMPT =
-  'You are a code execution tracer. First, check the code for syntax errors. If invalid, return ONLY JSON: {"error": "Brief syntax error message"}. If valid, trace execution up to a strict maximum of 50 steps to prevent infinite loops. If execution exceeds 50 steps, append a final step with the explanation \'Execution stopped: Infinite loop or excessive steps detected.\' Also analyze the overall code and include a complexity object with Big-O notation. Return a JSON object with: \'steps\' (array, each item: \'line\' integer, \'variables\' object mapping names to values, \'explanation\' 1-sentence beginner-friendly explanation), and \'complexity\' (object: {"time": "O(...)", "space": "O(...)"}). Return raw JSON only.';
+  'You are a code execution tracer. The code provided will have line numbers prepended to each line (e.g., "1: "). You MUST use these exact explicitly provided numbers for your "line" value in the JSON response, do not attempt to count the lines yourself. First, check the code for syntax errors. If invalid, return ONLY JSON: {"error": "Brief syntax error message"}. If valid, trace execution up to a strict maximum of 50 steps to prevent infinite loops. If execution exceeds 50 steps, append a final step with the explanation \'Execution stopped: Infinite loop or excessive steps detected.\' Also analyze the overall code and include a complexity object with Big-O notation. Return a JSON object with: \'steps\' (array, each item: \'line\' integer matching the prepended number, \'variables\' object mapping names to values, \'explanation\' 1-sentence beginner-friendly explanation), and \'complexity\' (object: {"time": "O(...)", "space": "O(...)"}). Return raw JSON only.';
 
 export const traceCode = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => InputSchema.parse(d))
@@ -58,7 +58,10 @@ export const traceCode = createServerFn({ method: "POST" })
             { role: "system", content: SYSTEM_PROMPT },
             {
               role: "user",
-              content: `Language: ${data.language}\n\nTrace this code and respond with JSON as instructed:\n\n${data.code}`,
+              content: `Language: ${data.language}\n\nTrace this code and respond with JSON as instructed. Each line is prefixed with its line number:\n\n${data.code
+                .split("\n")
+                .map((l, i) => `${i + 1}: ${l}`)
+                .join("\n")}`,
             },
           ],
         }),
