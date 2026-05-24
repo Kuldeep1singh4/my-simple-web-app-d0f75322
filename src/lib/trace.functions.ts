@@ -58,7 +58,10 @@ export const traceCode = createServerFn({ method: "POST" })
             { role: "system", content: SYSTEM_PROMPT },
             {
               role: "user",
-              content: `Language: ${data.language}\n\nTrace this code and respond with JSON as instructed:\n\n${data.code}`,
+              content: `Language: ${data.language}\n\nTrace this code and respond with JSON as instructed. Each line is prefixed with its line number:\n\n${data.code
+                .split("\n")
+                .map((l, i) => `${i + 1}: ${l}`)
+                .join("\n")}`,
             },
           ],
         }),
