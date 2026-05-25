@@ -8,7 +8,7 @@ import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
 import { StateField, StateEffect, type Extension } from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Clock, Database } from "lucide-react";
+import { Play, Pause, StepForward, StepBack, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { traceCode, type TraceStep, type JsonValue, type Complexity } from "@/lib/trace.functions";
-import { cn } from "@/lib/utils";
 
 type Language = "javascript" | "python" | "java" | "c" | "cpp";
 
@@ -101,7 +100,6 @@ function languageExtension(lang: Language): Extension {
   }
 }
 
-// CodeMirror highlight extension for the active line
 const setActiveLine = StateEffect.define<number | null>();
 const activeLineField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -146,9 +144,10 @@ function isTreeNode(v: JsonValue): v is { [k: string]: JsonValue } {
   return isPlainObject(v) && ("left" in v || "right" in v);
 }
 
-const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 };
+// Fluid spring used everywhere
+const SPRING = { type: "spring" as const, bounce: 0.5, duration: 0.6 };
 
-// ---------- Color palette by action ----------
+// ---------- Action color palette ----------
 type ColorKind = "compare" | "swapError" | "successInsert" | "readWrite" | "default";
 function actionKind(action?: string): ColorKind {
   switch (action) {
@@ -167,18 +166,37 @@ function actionKind(action?: string): ColorKind {
       return "default";
   }
 }
-const COLORS: Record<ColorKind, { bg: string; border: string; fg: string }> = {
-  compare: { bg: "oklch(0.78 0.17 80)", border: "oklch(0.68 0.2 75)", fg: "oklch(0.2 0.05 80)" },
-  swapError: { bg: "oklch(0.65 0.22 25)", border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)" },
-  successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)" },
-  readWrite: { bg: "oklch(0.7 0.15 230)", border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)" },
-  default: { bg: "oklch(0.32 0.04 250)", border: "oklch(0.45 0.05 250)", fg: "oklch(0.95 0.01 250)" },
+const COLORS: Record<ColorKind, { bg: string; border: string; fg: string; glow: string }> = {
+  compare:       { bg: "oklch(0.78 0.17 80)",  border: "oklch(0.68 0.2 75)",  fg: "oklch(0.2 0.05 80)",  glow: "oklch(0.78 0.17 80)" },
+  swapError:     { bg: "oklch(0.65 0.22 25)",  border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.65 0.22 25)" },
+  successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)",glow: "oklch(0.72 0.19 145)" },
+  readWrite:     { bg: "oklch(0.7 0.15 230)",  border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.7 0.15 230)" },
+  default:       { bg: "oklch(0.28 0.04 250)", border: "oklch(0.42 0.05 250)",fg: "oklch(0.95 0.01 250)",glow: "oklch(0.7 0.15 230)" },
 };
+
+// ---------- Pointer detection ----------
+const POINTER_NAME_RE = /^(i|j|k|l|m|n|p|q|r|s|x|y|idx|index|pos|left|right|lo|hi|mid|start|end|ptr|cur|prev|slow|fast)$/i;
+function isPointerName(name: string) {
+  return POINTER_NAME_RE.test(name);
+}
+// Distinct neon colors for pointers, cycled by name
+const POINTER_COLORS = [
+  "#22d3ee", // cyan   -> i
+  "#ec4899", // pink   -> j
+  "#a3e635", // lime
+  "#fbbf24", // amber
+  "#a78bfa", // violet
+  "#f472b6", // rose
+];
+function pointerColor(name: string, allNames: string[]) {
+  const idx = allNames.indexOf(name);
+  return POINTER_COLORS[(idx >= 0 ? idx : 0) % POINTER_COLORS.length];
+}
 
 // ---------- Active variable parsing ----------
 type ActiveSet = {
-  names: Set<string>;            // "total", "i", "arr"
-  indices: Map<string, Set<number>>; // arr -> {0,1}
+  names: Set<string>;
+  indices: Map<string, Set<number>>;
 };
 function parseActive(list: string[] | undefined): ActiveSet {
   const names = new Set<string>();
@@ -197,7 +215,9 @@ function parseActive(list: string[] | undefined): ActiveSet {
   return { names, indices };
 }
 
-// ---------- Animated array row ----------
+type PointerInfo = { var: string; index: number; color: string };
+
+// ---------- Animated array row with pointers underneath ----------
 function ArrayRow({
   name,
   value,
@@ -207,7 +227,7 @@ function ArrayRow({
   name: string;
   value: JsonValue[];
   active: ActiveSet;
-  pointers: { var: string; index: number }[];
+  pointers: PointerInfo[];
 }) {
   const activeIdx = active.indices.get(name) ?? new Set<number>();
   const nameActive = active.names.has(name) && activeIdx.size === 0;
@@ -217,7 +237,7 @@ function ArrayRow({
       <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
         {name}
       </div>
-      <div className="relative pb-10">
+      <div className="relative pb-12">
         <LayoutGroup id={`arr-${name}`}>
           <motion.div layout className="flex gap-1.5 overflow-x-auto pb-1">
             {value.map((item, i) => {
@@ -232,7 +252,10 @@ function ArrayRow({
                     backgroundColor: isActive ? "var(--cell-active-bg)" : COLORS.default.bg,
                     borderColor: isActive ? "var(--cell-active-border)" : COLORS.default.border,
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
-                    scale: isActive ? 1.08 : 1,
+                    scale: isActive ? 1.1 : 1,
+                    boxShadow: isActive
+                      ? "0 0 15px var(--cell-active-glow), 0 0 30px color-mix(in oklab, var(--cell-active-glow) 40%, transparent)"
+                      : "0 0 0 transparent",
                   }}
                   className="relative flex flex-col items-center justify-center rounded-md border-2 font-mono font-semibold text-sm min-w-12 h-12 px-2"
                   style={{ backgroundColor: COLORS.default.bg, borderColor: COLORS.default.border }}
@@ -241,90 +264,110 @@ function ArrayRow({
                   <span className="absolute -bottom-4 text-[10px] font-mono text-muted-foreground">
                     {i}
                   </span>
-                  {/* Pointers */}
-                  <AnimatePresence>
-                    {pointers
-                      .filter((p) => p.index === i)
-                      .map((p, k) => (
-                        <motion.div
-                          key={p.var}
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={SPRING}
-                          style={{ top: `calc(100% + ${14 + k * 18}px)` }}
-                          className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center"
-                        >
-                          <span className="text-primary text-lg leading-none font-bold">↑</span>
-                          <span className="text-[10px] font-mono text-primary font-bold">{p.var}</span>
-                        </motion.div>
-                      ))}
-                  </AnimatePresence>
                 </motion.div>
               );
             })}
           </motion.div>
+
+          {/* Pointer track */}
+          <LayoutGroup id={`ptrs-${name}`}>
+            <div className="absolute left-0 right-0 top-full mt-4 h-8 pointer-events-none">
+              <div className="relative flex gap-1.5">
+                {value.map((_, i) => (
+                  <div key={i} className="min-w-12 px-2 relative">
+                    <AnimatePresence>
+                      {pointers
+                        .filter((p) => p.index === i)
+                        .map((p, k) => (
+                          <motion.div
+                            key={p.var}
+                            layoutId={`ptr-${name}-${p.var}`}
+                            initial={{ opacity: 0, scale: 0.6 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={SPRING}
+                            style={{
+                              top: k * 18,
+                              color: p.color,
+                              textShadow: `0 0 8px ${p.color}, 0 0 16px ${p.color}`,
+                              filter: `drop-shadow(0 0 6px ${p.color})`,
+                            }}
+                            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center font-mono font-bold"
+                          >
+                            <span className="text-lg leading-none">↑</span>
+                            <span className="text-[10px]">{p.var}</span>
+                          </motion.div>
+                        ))}
+                    </AnimatePresence>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </LayoutGroup>
         </LayoutGroup>
       </div>
     </div>
   );
 }
 
-// ---------- Scalar card ----------
-function ScalarCard({
-  name,
-  value,
+// ---------- Holding cells (stored values like key / temp) ----------
+function HoldingCells({
+  cells,
   active,
   actionColor,
 }: {
-  name: string;
-  value: JsonValue;
-  active: boolean;
-  actionColor: { bg: string; border: string; fg: string };
+  cells: { name: string; value: JsonValue }[];
+  active: ActiveSet;
+  actionColor: { bg: string; border: string; fg: string; glow: string };
 }) {
-  const display = useMemo(() => {
-    try {
-      return typeof value === "object" && value !== null
-        ? JSON.stringify(value)
-        : formatPrimitive(value);
-    } catch {
-      return String(value);
-    }
-  }, [value]);
-
+  if (cells.length === 0) return null;
   return (
-    <motion.div
-      layout
-      data-active-key={name}
-      transition={SPRING}
-      animate={{
-        backgroundColor: active ? actionColor.bg : "var(--color-card)",
-        borderColor: active ? actionColor.border : "var(--color-border)",
-        scale: active ? 1.04 : 1,
-      }}
-      className="rounded-lg border-2 p-3"
-    >
-      <div
-        className="text-xs uppercase tracking-wider font-mono"
-        style={{ color: active ? actionColor.fg : "var(--color-muted-foreground)" }}
-      >
-        {name}
-      </div>
-      <motion.div
-        key={display}
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={SPRING}
-        className="mt-1 font-mono text-lg font-semibold break-all"
-        style={{ color: active ? actionColor.fg : "var(--color-foreground)" }}
-      >
-        {display}
-      </motion.div>
-    </motion.div>
+    <div className="flex flex-wrap items-end gap-3">
+      {cells.map(({ name, value }) => {
+        const isActive = active.names.has(name);
+        const isEmpty = value === null || value === undefined;
+        const display = isEmpty ? "" : formatPrimitive(value);
+        return (
+          <div key={name} className="flex flex-col items-center gap-1">
+            <span
+              className="text-[10px] font-mono uppercase tracking-wider"
+              style={{ color: isActive ? actionColor.glow : "var(--color-muted-foreground)" }}
+            >
+              {name}
+            </span>
+            <motion.div
+              layout
+              data-active-key={name}
+              transition={SPRING}
+              animate={{
+                scale: isActive ? 1.1 : 1,
+                backgroundColor: isActive
+                  ? actionColor.bg
+                  : isEmpty
+                    ? "transparent"
+                    : COLORS.default.bg,
+                borderColor: isActive ? actionColor.border : COLORS.default.border,
+                color: isActive ? actionColor.fg : COLORS.default.fg,
+                boxShadow: isActive
+                  ? `0 0 15px ${actionColor.glow}, 0 0 32px color-mix(in oklab, ${actionColor.glow} 50%, transparent)`
+                  : "0 0 0 transparent",
+              }}
+              className={
+                "flex items-center justify-center rounded-md font-mono font-semibold text-sm min-w-12 h-12 px-2 border-2 " +
+                (isEmpty ? "border-dashed" : "")
+              }
+              style={{ borderStyle: isEmpty ? "dashed" : "solid" }}
+            >
+              {display || <span className="opacity-40 text-xs">empty</span>}
+            </motion.div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-// ---------- Linked List / Tree (kept simple) ----------
+// ---------- Linked List / Tree ----------
 function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
   const nodes: { [k: string]: JsonValue }[] = [];
   let cur: JsonValue = head;
@@ -392,7 +435,7 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
   );
 }
 
-// ---------- Floating Tooltip ----------
+// ---------- Floating Tooltip (glassmorphism, anchored below) ----------
 function FloatingTooltip({
   containerRef,
   targetKey,
@@ -421,14 +464,18 @@ function FloatingTooltip({
     }
     const cR = cont.getBoundingClientRect();
     const eR = cell.getBoundingClientRect();
-    const tipW = tipRef.current?.offsetWidth ?? 220;
+    const tipW = tipRef.current?.offsetWidth ?? 240;
     const tipH = tipRef.current?.offsetHeight ?? 50;
+    // Anchor below the element + pointer track (~40px buffer)
     let x = eR.left - cR.left + eR.width / 2 - tipW / 2 + cont.scrollLeft;
-    let y = eR.top - cR.top - tipH - 12 + cont.scrollTop;
+    let y = eR.bottom - cR.top + 48 + cont.scrollTop;
     const maxX = cont.clientWidth - tipW - 8;
     if (x < 8) x = 8;
     if (x > maxX) x = Math.max(8, maxX);
-    if (y < 4) y = eR.bottom - cR.top + 12 + cont.scrollTop; // flip below
+    // If overflowing bottom, flip above
+    if (y + tipH > cont.scrollTop + cont.clientHeight - 8) {
+      y = eR.top - cR.top - tipH - 12 + cont.scrollTop;
+    }
     setPos({ x, y });
   }, [visible, targetKey, text, containerRef]);
 
@@ -437,15 +484,22 @@ function FloatingTooltip({
       {visible && pos && (
         <motion.div
           ref={tipRef}
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
-          exit={{ opacity: 0, scale: 0.9 }}
+          exit={{ opacity: 0, scale: 0.92 }}
           transition={SPRING}
-          style={{ position: "absolute", top: 0, left: 0, maxWidth: 280 }}
-          className="z-20 pointer-events-none rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs shadow-xl shadow-primary/30 border border-primary/50"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            maxWidth: 300,
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            background: "color-mix(in oklab, black 55%, transparent)",
+          }}
+          className="z-20 pointer-events-none rounded-xl px-3.5 py-2 text-xs text-white shadow-2xl border border-white/15"
         >
           <div className="leading-snug">{text}</div>
-          <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 rotate-45 bg-primary border-r border-b border-primary/50" />
         </motion.div>
       )}
     </AnimatePresence>
@@ -473,11 +527,11 @@ export function CodeVisualizer() {
   const active = useMemo(() => parseActive(current?.activeVariables), [current]);
   const actionColor = COLORS[actionKind(current?.actionType)];
 
-  // CSS vars for active cells (used by ArrayRow children)
   const canvasStyle = {
     ["--cell-active-bg" as string]: actionColor.bg,
     ["--cell-active-border" as string]: actionColor.border,
     ["--cell-active-fg" as string]: actionColor.fg,
+    ["--cell-active-glow" as string]: actionColor.glow,
   } as React.CSSProperties;
 
   useEffect(() => {
@@ -529,8 +583,6 @@ export function CodeVisualizer() {
   const stepBack = () => setIdx((i) => Math.max(i - 1, 0));
 
   const variables = current?.variables ?? {};
-
-  // Partition variables
   const entries = Object.entries(variables);
   const arrays = entries.filter(([, v]) => Array.isArray(v)) as [string, JsonValue[]][];
   const trees = entries.filter(([, v]) => isTreeNode(v));
@@ -539,26 +591,39 @@ export function CodeVisualizer() {
     ([, v]) => !Array.isArray(v) && !isLinkedNode(v) && !isTreeNode(v)
   );
 
-  // Pointers: scalar numeric vars whose value is a valid index of an array
+  // Pointer scalars: name matches and value is a valid integer index of some array
+  const pointerScalarNames = useMemo(() => {
+    const names: string[] = [];
+    for (const [sName, sVal] of scalars) {
+      if (!isPointerName(sName)) continue;
+      if (typeof sVal !== "number" || !Number.isInteger(sVal)) continue;
+      names.push(sName);
+    }
+    return names;
+  }, [scalars]);
+
   const pointersByArray = useMemo(() => {
-    const map = new Map<string, { var: string; index: number }[]>();
+    const map = new Map<string, PointerInfo[]>();
     for (const [aName, aVal] of arrays) {
       const len = aVal.length;
-      const list: { var: string; index: number }[] = [];
-      for (const [sName, sVal] of scalars) {
-        if (typeof sVal === "number" && Number.isInteger(sVal) && sVal >= 0 && sVal < len) {
-          // Heuristic: short single-letter or common index names
-          if (/^[a-z]$/i.test(sName) || /^(idx|index|pos|left|right|lo|hi|mid)$/i.test(sName)) {
-            list.push({ var: sName, index: sVal });
-          }
+      const list: PointerInfo[] = [];
+      for (const pName of pointerScalarNames) {
+        const v = variables[pName];
+        if (typeof v === "number" && v >= 0 && v < len) {
+          list.push({ var: pName, index: v, color: pointerColor(pName, pointerScalarNames) });
         }
       }
       map.set(aName, list);
     }
     return map;
-  }, [arrays, scalars]);
+  }, [arrays, pointerScalarNames, variables]);
 
-  // Tooltip target: first active key found in the DOM
+  // Scalars that are NOT pointers -> render as holding cells (if primitive) or scalar cards (if complex)
+  const nonPointerScalars = scalars.filter(([n]) => !pointerScalarNames.includes(n));
+  const holdingCells = nonPointerScalars
+    .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
+    .map(([name, value]) => ({ name, value }));
+
   const tooltipTarget = useMemo(() => {
     if (!current?.activeVariables?.length) return null;
     return current.activeVariables[0];
@@ -625,8 +690,24 @@ export function CodeVisualizer() {
         <div
           ref={canvasRef}
           style={canvasStyle}
-          className="relative flex-1 overflow-y-auto p-4 space-y-5"
+          className="relative flex-1 overflow-y-auto p-4 pt-6 space-y-6"
         >
+          {/* Complexity badge */}
+          {complexity && (
+            <div
+              className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full text-[11px] font-mono font-medium text-white/90 border border-white/15 shadow-lg"
+              style={{
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
+                background: "color-mix(in oklab, black 45%, transparent)",
+              }}
+            >
+              Time: <span className="text-primary font-semibold">{complexity.time}</span>
+              <span className="mx-1.5 opacity-40">|</span>
+              Space: <span className="text-primary font-semibold">{complexity.space}</span>
+            </div>
+          )}
+
           {error && (
             <Card className="p-3 border-destructive/40 bg-destructive/10 text-destructive text-sm">
               {error}
@@ -660,41 +741,14 @@ export function CodeVisualizer() {
             </div>
           )}
 
-          {complexity && (
-            <Card className="p-4 bg-gradient-to-br from-primary/10 via-card to-card border-primary/30">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-                Complexity Analysis
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-primary shrink-0" />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Time
-                    </span>
-                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
-                      {complexity.time}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-primary shrink-0" />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Space
-                    </span>
-                    <span className="inline-flex items-center self-start mt-0.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary font-mono text-sm font-semibold border border-primary/30">
-                      {complexity.space}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+          {/* Holding cells floating above the array */}
+          {holdingCells.length > 0 && (
+            <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
           )}
 
           {/* Arrays */}
           {arrays.length > 0 && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {arrays.map(([name, val]) => (
                 <ArrayRow
                   key={name}
@@ -729,28 +783,6 @@ export function CodeVisualizer() {
             </div>
           ))}
 
-          {/* Scalars */}
-          {scalars.length > 0 && (
-            <div>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                Variable Watch
-              </div>
-              <LayoutGroup id="scalars">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {scalars.map(([k, v]) => (
-                    <ScalarCard
-                      key={k}
-                      name={k}
-                      value={v}
-                      active={active.names.has(k)}
-                      actionColor={actionColor}
-                    />
-                  ))}
-                </div>
-              </LayoutGroup>
-            </div>
-          )}
-
           {/* Floating tooltip */}
           {current && (
             <FloatingTooltip
@@ -761,14 +793,19 @@ export function CodeVisualizer() {
             />
           )}
 
-          {/* Fallback explanation if no active target */}
+          {/* Fallback explanation when no active target */}
           {current && !tooltipTarget && (
-            <Card className="p-3 bg-primary/5 border-primary/30">
-              <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-1">
-                Line {current.line}
-              </div>
-              <div className="text-sm leading-relaxed">{current.explanation}</div>
-            </Card>
+            <div
+              className="rounded-xl px-3.5 py-2 text-xs text-white/90 border border-white/15"
+              style={{
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                background: "color-mix(in oklab, black 55%, transparent)",
+              }}
+            >
+              <span className="text-primary font-semibold mr-2">Line {current.line}</span>
+              {current.explanation}
+            </div>
           )}
         </div>
 
