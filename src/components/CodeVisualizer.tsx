@@ -227,13 +227,13 @@ function ArrayRow({
   const nameActive = active.names.has(name) && activeIdx.size === 0;
 
   return (
-    <div className="space-y-1">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
+    <div className="space-y-1" style={{ overflow: "visible" }}>
+      <div className="text-xs uppercase tracking-wider font-mono" style={{ color: "#333" }}>
         {name}
       </div>
-      <div className="relative pb-12">
+      <div className="relative" style={{ overflow: "visible", paddingBottom: "3rem" }}>
         <LayoutGroup id={`arr-${name}`}>
-          <motion.div layout className="flex gap-1.5 overflow-x-auto pb-1">
+          <motion.div layout className="flex gap-1.5" style={{ overflow: "visible" }}>
             {value.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
               return (
@@ -244,18 +244,21 @@ function ArrayRow({
                   transition={SPRING}
                   animate={{
                     backgroundColor: isActive ? "var(--cell-active-bg)" : COLORS.default.bg,
-                    borderColor: isActive ? "var(--cell-active-border)" : COLORS.default.border,
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
-                    scale: isActive ? 1.1 : 1,
-                    boxShadow: isActive
-                      ? "0 0 15px var(--cell-active-glow), 0 0 30px color-mix(in oklab, var(--cell-active-glow) 40%, transparent)"
-                      : "0 0 0 transparent",
                   }}
-                  className="relative flex flex-col items-center justify-center rounded-md border-2 font-mono font-semibold text-sm min-w-12 h-12 px-2"
-                  style={{ backgroundColor: COLORS.default.bg, borderColor: COLORS.default.border }}
+                  className="relative flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+                  style={{
+                    backgroundColor: COLORS.default.bg,
+                    border: "1px solid #333",
+                    borderRadius: 4,
+                    boxShadow: "none",
+                  }}
                 >
                   <span>{formatPrimitive(item)}</span>
-                  <span className="absolute -bottom-4 text-[10px] font-mono text-muted-foreground">
+                  <span
+                    className="absolute text-[10px] font-mono"
+                    style={{ bottom: "-18px", color: "#555" }}
+                  >
                     {i}
                   </span>
                 </motion.div>
@@ -265,7 +268,10 @@ function ArrayRow({
 
           {/* Pointer track */}
           <LayoutGroup id={`ptrs-${name}`}>
-            <div className="absolute left-0 right-0 top-full mt-4 h-8 pointer-events-none">
+            <div
+              className="absolute left-0 right-0 pointer-events-none"
+              style={{ top: "100%", marginTop: "20px", height: "32px", overflow: "visible" }}
+            >
               <div className="relative flex gap-1.5">
                 {value.map((_, i) => (
                   <div key={i} className="min-w-12 px-2 relative">
@@ -276,16 +282,11 @@ function ArrayRow({
                           <motion.div
                             key={p.var}
                             layoutId={`ptr-${name}-${p.var}`}
-                            initial={{ opacity: 0, scale: 0.6 }}
+                            initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.6 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
                             transition={SPRING}
-                            style={{
-                              top: k * 18,
-                              color: p.color,
-                              textShadow: `0 0 8px ${p.color}, 0 0 16px ${p.color}`,
-                              filter: `drop-shadow(0 0 6px ${p.color})`,
-                            }}
+                            style={{ top: k * 18, color: p.color }}
                             className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center font-mono font-bold"
                           >
                             <span className="text-lg leading-none">↑</span>
