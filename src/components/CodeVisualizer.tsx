@@ -171,7 +171,7 @@ const COLORS: Record<ColorKind, { bg: string; border: string; fg: string; glow: 
   swapError:     { bg: "oklch(0.65 0.22 25)",  border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.65 0.22 25)" },
   successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)",glow: "oklch(0.72 0.19 145)" },
   readWrite:     { bg: "oklch(0.7 0.15 230)",  border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.7 0.15 230)" },
-  default:       { bg: "oklch(0.28 0.04 250)", border: "oklch(0.42 0.05 250)",fg: "oklch(0.95 0.01 250)",glow: "oklch(0.7 0.15 230)" },
+  default:       { bg: "#FFFFFF",             border: "#D1D5DB",             fg: "#111827",              glow: "oklch(0.7 0.15 230)" },
 };
 
 // ---------- Pointer detection ----------
