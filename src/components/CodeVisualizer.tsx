@@ -171,7 +171,7 @@ const COLORS: Record<ColorKind, { bg: string; border: string; fg: string; glow: 
   swapError:     { bg: "oklch(0.65 0.22 25)",  border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.65 0.22 25)" },
   successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)",glow: "oklch(0.72 0.19 145)" },
   readWrite:     { bg: "oklch(0.7 0.15 230)",  border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.7 0.15 230)" },
-  default:       { bg: "oklch(0.28 0.04 250)", border: "oklch(0.42 0.05 250)",fg: "oklch(0.95 0.01 250)",glow: "oklch(0.7 0.15 230)" },
+  default:       { bg: "#FFFFFF",             border: "#D1D5DB",             fg: "#111827",              glow: "oklch(0.7 0.15 230)" },
 };
 
 // ---------- Pointer detection ----------
@@ -630,17 +630,17 @@ export function CodeVisualizer() {
   }, [current]);
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-background text-foreground">
-      {/* Editor */}
-      <div className="flex flex-col w-full md:w-1/2 h-[40vh] md:h-full border-b md:border-b-0 md:border-r border-border">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50 gap-2">
+    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background text-foreground">
+      {/* ===== Editor (Mobile: top 35% / Desktop: left 50%, full height) ===== */}
+      <div className="flex flex-col w-full md:w-1/2 h-[35%] md:h-full border-b md:border-b-0 md:border-r border-border min-h-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50 gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="h-4 w-4 text-primary shrink-0" />
-            <h1 className="font-semibold truncate">Code Visualizer</h1>
+            <h1 className="font-semibold truncate text-sm">Code Visualizer</h1>
           </div>
           <div className="flex items-center gap-2">
             <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
-              <SelectTrigger className="h-8 w-[120px] text-xs" aria-label="Language">
+              <SelectTrigger className="h-8 w-[110px] text-xs" aria-label="Language">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -662,7 +662,7 @@ export function CodeVisualizer() {
             </Button>
           </div>
         </div>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-[#1e1e2e]">
           <CodeMirror
             value={code}
             onChange={setCode}
@@ -678,112 +678,125 @@ export function CodeVisualizer() {
         </div>
       </div>
 
-      {/* Canvas */}
-      <div className="flex flex-col w-full md:w-1/2 h-[60vh] md:h-full">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/50">
-          <h2 className="font-semibold">Visualization</h2>
-          <div className="text-xs text-muted-foreground font-mono">
-            {steps.length > 0 ? `Step ${idx + 1} / ${steps.length}` : "No trace yet"}
-          </div>
-        </div>
-
+      {/* ===== Right column: Canvas + Controls ===== */}
+      <div className="flex flex-col w-full md:w-1/2 h-[65%] md:h-full min-h-0">
+        {/* Canvas: Mobile 50/(50+15)=~76.9% of right col; Desktop 85% */}
         <div
           ref={canvasRef}
           style={canvasStyle}
-          className="relative flex-1 overflow-y-auto p-4 pt-6 space-y-6"
+          className="relative flex-1 min-h-0 overflow-hidden flex items-center justify-center p-3 md:p-6"
         >
+          {/* Whiteboard background */}
+          <div className="absolute inset-0 bg-[#F8F9FA]" aria-hidden />
+
           {/* Complexity badge */}
           {complexity && (
             <div
-              className="absolute top-3 right-3 z-30 px-3 py-1.5 rounded-full text-[11px] font-mono font-medium text-white/90 border border-white/15 shadow-lg"
+              className="absolute top-2 right-2 z-30 px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono font-medium text-white/95 border border-white/15 shadow-lg"
               style={{
                 backdropFilter: "blur(10px)",
                 WebkitBackdropFilter: "blur(10px)",
-                background: "color-mix(in oklab, black 45%, transparent)",
+                background: "color-mix(in oklab, black 55%, transparent)",
               }}
             >
-              Time: <span className="text-primary font-semibold">{complexity.time}</span>
+              Time: <span className="text-cyan-300 font-semibold">{complexity.time}</span>
               <span className="mx-1.5 opacity-40">|</span>
-              Space: <span className="text-primary font-semibold">{complexity.space}</span>
+              Space: <span className="text-cyan-300 font-semibold">{complexity.space}</span>
             </div>
           )}
 
-          {error && (
-            <Card className="p-3 border-destructive/40 bg-destructive/10 text-destructive text-sm">
-              {error}
-            </Card>
+          {/* Step counter */}
+          {steps.length > 0 && (
+            <div className="absolute top-2 left-2 z-30 px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono text-gray-700 bg-white/80 border border-gray-200 shadow-sm">
+              Step {idx + 1} / {steps.length}
+            </div>
           )}
 
-          {traceError && (
-            <Card className="p-4 border-2 border-destructive bg-destructive/10">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-destructive/20 text-destructive flex items-center justify-center font-bold text-lg shrink-0">
-                  !
-                </div>
-                <div>
-                  <div className="text-xs uppercase tracking-wider text-destructive font-bold mb-1">
-                    Syntax Error
+          {/* Centered stage content */}
+          <div
+            className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full overflow-hidden"
+            style={{
+              // Dynamic scale so shapes fit
+              fontSize: "clamp(0.7rem, 1.6vmin, 1rem)",
+            }}
+          >
+            {error && (
+              <Card className="p-3 border-destructive/40 bg-destructive/10 text-destructive text-sm max-w-md">
+                {error}
+              </Card>
+            )}
+
+            {traceError && (
+              <Card className="p-4 border-2 border-destructive bg-destructive/10 max-w-md">
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-full bg-destructive/20 text-destructive flex items-center justify-center font-bold text-lg shrink-0">
+                    !
                   </div>
-                  <div className="text-sm text-destructive font-mono leading-relaxed break-words">
-                    {traceError}
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-destructive font-bold mb-1">
+                      Syntax Error
+                    </div>
+                    <div className="text-sm text-destructive font-mono leading-relaxed break-words">
+                      {traceError}
+                    </div>
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {!error && !traceError && steps.length === 0 && !loading && (
+              <div className="text-center text-gray-500 text-sm max-w-xs">
+                Write some code and click{" "}
+                <span className="text-gray-900 font-medium">Visualize</span> to trace its
+                execution step by step.
               </div>
-            </Card>
-          )}
+            )}
 
-          {!error && !traceError && steps.length === 0 && !loading && (
-            <div className="h-full flex items-center justify-center text-center text-muted-foreground text-sm">
-              <div>
-                Write some code and click <span className="text-primary font-medium">Visualize</span>{" "}
-                to trace its execution step by step.
+            {/* Holding cells */}
+            {holdingCells.length > 0 && (
+              <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
+            )}
+
+            {/* Arrays */}
+            {arrays.length > 0 && (
+              <div
+                className="flex flex-col items-center gap-6"
+                style={{ maxWidth: "min(100%, 90vw)" }}
+              >
+                {arrays.map(([name, val]) => (
+                  <ArrayRow
+                    key={name}
+                    name={name}
+                    value={val}
+                    active={active}
+                    pointers={pointersByArray.get(name) ?? []}
+                  />
+                ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Holding cells floating above the array */}
-          {holdingCells.length > 0 && (
-            <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
-          )}
-
-          {/* Arrays */}
-          {arrays.length > 0 && (
-            <div className="space-y-6">
-              {arrays.map(([name, val]) => (
-                <ArrayRow
-                  key={name}
-                  name={name}
-                  value={val}
-                  active={active}
-                  pointers={pointersByArray.get(name) ?? []}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Trees */}
-          {trees.map(([name, val]) => (
-            <div key={name} className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
-                {name}
-              </div>
-              <div className="overflow-x-auto">
+            {/* Trees */}
+            {trees.map(([name, val]) => (
+              <div key={name} className="flex flex-col items-center gap-1">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                  {name}
+                </div>
                 <TreeView node={val as { [k: string]: JsonValue }} />
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Linked lists */}
-          {linked.map(([name, val]) => (
-            <div key={name} className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
-                {name}
+            {/* Linked lists */}
+            {linked.map(([name, val]) => (
+              <div key={name} className="flex flex-col items-center gap-1">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                  {name}
+                </div>
+                <LinkedListView head={val as { [k: string]: JsonValue }} />
               </div>
-              <LinkedListView head={val as { [k: string]: JsonValue }} />
-            </div>
-          ))}
+            ))}
+          </div>
 
-          {/* Floating tooltip */}
+          {/* Floating tooltip overlay (positioned absolutely within canvas) */}
           {current && (
             <FloatingTooltip
               containerRef={canvasRef}
@@ -792,29 +805,34 @@ export function CodeVisualizer() {
               visible={!!tooltipTarget}
             />
           )}
-
-          {/* Fallback explanation when no active target */}
-          {current && !tooltipTarget && (
-            <div
-              className="rounded-xl px-3.5 py-2 text-xs text-white/90 border border-white/15"
-              style={{
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                background: "color-mix(in oklab, black 55%, transparent)",
-              }}
-            >
-              <span className="text-primary font-semibold mr-2">Line {current.line}</span>
-              {current.explanation}
-            </div>
-          )}
         </div>
 
-        {/* Controls */}
-        {!traceError && (
-          <div className="border-t border-border bg-card/50 p-3 flex items-center justify-center gap-2">
+        {/* ===== Control Center (pinned, ~15% height) ===== */}
+        <div className="h-[15vh] md:h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
+          {/* Subtitle / explanation */}
+          <div className="flex-1 min-h-0 px-3 py-1.5 flex items-center justify-center overflow-hidden">
+            {traceError ? (
+              <div className="text-xs text-destructive font-mono text-center line-clamp-2">
+                {traceError}
+              </div>
+            ) : current ? (
+              <div className="text-xs md:text-sm text-foreground/90 text-center line-clamp-2 leading-snug">
+                <span className="text-primary font-semibold mr-1.5">Line {current.line}</span>
+                {current.explanation}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground italic">
+                Controls
+              </div>
+            )}
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center justify-center gap-2 pb-2 px-3">
             <Button
               variant="outline"
               size="icon"
+              className="h-9 w-9"
               onClick={stepBack}
               disabled={steps.length === 0 || idx <= 0}
               aria-label="Step backward"
@@ -824,6 +842,7 @@ export function CodeVisualizer() {
             {playing ? (
               <Button
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => setPlaying(false)}
                 disabled={steps.length === 0}
                 aria-label="Pause"
@@ -833,6 +852,7 @@ export function CodeVisualizer() {
             ) : (
               <Button
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => {
                   if (idx >= steps.length - 1) setIdx(0);
                   setPlaying(true);
@@ -846,6 +866,7 @@ export function CodeVisualizer() {
             <Button
               variant="outline"
               size="icon"
+              className="h-9 w-9"
               onClick={stepForward}
               disabled={steps.length === 0 || idx >= steps.length - 1}
               aria-label="Step forward"
@@ -853,7 +874,7 @@ export function CodeVisualizer() {
               <StepForward className="h-4 w-4" />
             </Button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
