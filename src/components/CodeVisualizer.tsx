@@ -167,11 +167,12 @@ function actionKind(action?: string): ColorKind {
   }
 }
 const COLORS: Record<ColorKind, { bg: string; border: string; fg: string; glow: string }> = {
-  compare:       { bg: "oklch(0.78 0.17 80)",  border: "oklch(0.68 0.2 75)",  fg: "oklch(0.2 0.05 80)",  glow: "oklch(0.78 0.17 80)" },
-  swapError:     { bg: "oklch(0.65 0.22 25)",  border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.65 0.22 25)" },
-  successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)",glow: "oklch(0.72 0.19 145)" },
-  readWrite:     { bg: "oklch(0.7 0.15 230)",  border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.7 0.15 230)" },
-  default:       { bg: "#FFFFFF",             border: "#D1D5DB",             fg: "#111827",              glow: "oklch(0.7 0.15 230)" },
+  // Flat pastels — no neon, no glow
+  compare:       { bg: "#FFF3B0", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel yellow
+  swapError:     { bg: "#FFCDD2", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel red
+  successInsert: { bg: "#C8E6C9", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // mint green
+  readWrite:     { bg: "#BBDEFB", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel blue
+  default:       { bg: "#FFFFFF", border: "#333333", fg: "#1a1a1a", glow: "transparent" },
 };
 
 // ---------- Pointer detection ----------
@@ -179,15 +180,8 @@ const POINTER_NAME_RE = /^(i|j|k|l|m|n|p|q|r|s|x|y|idx|index|pos|left|right|lo|h
 function isPointerName(name: string) {
   return POINTER_NAME_RE.test(name);
 }
-// Distinct neon colors for pointers, cycled by name
-const POINTER_COLORS = [
-  "#22d3ee", // cyan   -> i
-  "#ec4899", // pink   -> j
-  "#a3e635", // lime
-  "#fbbf24", // amber
-  "#a78bfa", // violet
-  "#f472b6", // rose
-];
+// Flat dark colors for pointers — no neon
+const POINTER_COLORS = ["#1a1a1a", "#444444", "#2d3748", "#4a5568", "#555555", "#222222"];
 function pointerColor(name: string, allNames: string[]) {
   const idx = allNames.indexOf(name);
   return POINTER_COLORS[(idx >= 0 ? idx : 0) % POINTER_COLORS.length];
@@ -233,13 +227,13 @@ function ArrayRow({
   const nameActive = active.names.has(name) && activeIdx.size === 0;
 
   return (
-    <div className="space-y-1">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground font-mono">
+    <div className="space-y-1" style={{ overflow: "visible" }}>
+      <div className="text-xs uppercase tracking-wider font-mono" style={{ color: "#333" }}>
         {name}
       </div>
-      <div className="relative pb-12">
+      <div className="relative" style={{ overflow: "visible", paddingBottom: "3rem" }}>
         <LayoutGroup id={`arr-${name}`}>
-          <motion.div layout className="flex gap-1.5 overflow-x-auto pb-1">
+          <motion.div layout className="flex gap-1.5" style={{ overflow: "visible" }}>
             {value.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
               return (
@@ -250,18 +244,21 @@ function ArrayRow({
                   transition={SPRING}
                   animate={{
                     backgroundColor: isActive ? "var(--cell-active-bg)" : COLORS.default.bg,
-                    borderColor: isActive ? "var(--cell-active-border)" : COLORS.default.border,
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
-                    scale: isActive ? 1.1 : 1,
-                    boxShadow: isActive
-                      ? "0 0 15px var(--cell-active-glow), 0 0 30px color-mix(in oklab, var(--cell-active-glow) 40%, transparent)"
-                      : "0 0 0 transparent",
                   }}
-                  className="relative flex flex-col items-center justify-center rounded-md border-2 font-mono font-semibold text-sm min-w-12 h-12 px-2"
-                  style={{ backgroundColor: COLORS.default.bg, borderColor: COLORS.default.border }}
+                  className="relative flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+                  style={{
+                    backgroundColor: COLORS.default.bg,
+                    border: "1px solid #333",
+                    borderRadius: 4,
+                    boxShadow: "none",
+                  }}
                 >
                   <span>{formatPrimitive(item)}</span>
-                  <span className="absolute -bottom-4 text-[10px] font-mono text-muted-foreground">
+                  <span
+                    className="absolute text-[10px] font-mono"
+                    style={{ bottom: "-18px", color: "#555" }}
+                  >
                     {i}
                   </span>
                 </motion.div>
@@ -271,7 +268,10 @@ function ArrayRow({
 
           {/* Pointer track */}
           <LayoutGroup id={`ptrs-${name}`}>
-            <div className="absolute left-0 right-0 top-full mt-4 h-8 pointer-events-none">
+            <div
+              className="absolute left-0 right-0 pointer-events-none"
+              style={{ top: "100%", marginTop: "20px", height: "32px", overflow: "visible" }}
+            >
               <div className="relative flex gap-1.5">
                 {value.map((_, i) => (
                   <div key={i} className="min-w-12 px-2 relative">
@@ -282,16 +282,11 @@ function ArrayRow({
                           <motion.div
                             key={p.var}
                             layoutId={`ptr-${name}-${p.var}`}
-                            initial={{ opacity: 0, scale: 0.6 }}
+                            initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.6 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
                             transition={SPRING}
-                            style={{
-                              top: k * 18,
-                              color: p.color,
-                              textShadow: `0 0 8px ${p.color}, 0 0 16px ${p.color}`,
-                              filter: `drop-shadow(0 0 6px ${p.color})`,
-                            }}
+                            style={{ top: k * 18, color: p.color }}
                             className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center font-mono font-bold"
                           >
                             <span className="text-lg leading-none">↑</span>
@@ -331,7 +326,7 @@ function HoldingCells({
           <div key={name} className="flex flex-col items-center gap-1">
             <span
               className="text-[10px] font-mono uppercase tracking-wider"
-              style={{ color: isActive ? actionColor.glow : "var(--color-muted-foreground)" }}
+              style={{ color: "#333" }}
             >
               {name}
             </span>
@@ -340,23 +335,20 @@ function HoldingCells({
               data-active-key={name}
               transition={SPRING}
               animate={{
-                scale: isActive ? 1.1 : 1,
                 backgroundColor: isActive
                   ? actionColor.bg
                   : isEmpty
                     ? "transparent"
                     : COLORS.default.bg,
-                borderColor: isActive ? actionColor.border : COLORS.default.border,
                 color: isActive ? actionColor.fg : COLORS.default.fg,
-                boxShadow: isActive
-                  ? `0 0 15px ${actionColor.glow}, 0 0 32px color-mix(in oklab, ${actionColor.glow} 50%, transparent)`
-                  : "0 0 0 transparent",
               }}
-              className={
-                "flex items-center justify-center rounded-md font-mono font-semibold text-sm min-w-12 h-12 px-2 border-2 " +
-                (isEmpty ? "border-dashed" : "")
-              }
-              style={{ borderStyle: isEmpty ? "dashed" : "solid" }}
+              className="flex items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+              style={{
+                border: "1px solid #333",
+                borderStyle: isEmpty ? "dashed" : "solid",
+                borderRadius: 4,
+                boxShadow: "none",
+              }}
             >
               {display || <span className="opacity-40 text-xs">empty</span>}
             </motion.div>
@@ -714,10 +706,10 @@ export function CodeVisualizer() {
 
           {/* Centered stage content */}
           <div
-            className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full overflow-hidden"
+            className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full"
             style={{
-              // Dynamic scale so shapes fit
               fontSize: "clamp(0.7rem, 1.6vmin, 1rem)",
+              overflow: "visible",
             }}
           >
             {error && (
