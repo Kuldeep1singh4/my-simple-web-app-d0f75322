@@ -808,7 +808,7 @@ export function CodeVisualizer() {
         </div>
 
         {/* ===== Control Center (pinned, ~15% height) ===== */}
-        <div className="h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
+        <div className="h-[15vh] md:h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
           {/* Subtitle / explanation */}
           <div className="flex-1 min-h-0 px-3 py-1.5 flex items-center justify-center overflow-hidden">
             {traceError ? (
