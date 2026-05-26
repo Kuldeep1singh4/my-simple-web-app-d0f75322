@@ -326,7 +326,7 @@ function HoldingCells({
           <div key={name} className="flex flex-col items-center gap-1">
             <span
               className="text-[10px] font-mono uppercase tracking-wider"
-              style={{ color: isActive ? actionColor.glow : "var(--color-muted-foreground)" }}
+              style={{ color: "#333" }}
             >
               {name}
             </span>
@@ -335,23 +335,20 @@ function HoldingCells({
               data-active-key={name}
               transition={SPRING}
               animate={{
-                scale: isActive ? 1.1 : 1,
                 backgroundColor: isActive
                   ? actionColor.bg
                   : isEmpty
                     ? "transparent"
                     : COLORS.default.bg,
-                borderColor: isActive ? actionColor.border : COLORS.default.border,
                 color: isActive ? actionColor.fg : COLORS.default.fg,
-                boxShadow: isActive
-                  ? `0 0 15px ${actionColor.glow}, 0 0 32px color-mix(in oklab, ${actionColor.glow} 50%, transparent)`
-                  : "0 0 0 transparent",
               }}
-              className={
-                "flex items-center justify-center rounded-md font-mono font-semibold text-sm min-w-12 h-12 px-2 border-2 " +
-                (isEmpty ? "border-dashed" : "")
-              }
-              style={{ borderStyle: isEmpty ? "dashed" : "solid" }}
+              className="flex items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+              style={{
+                border: "1px solid #333",
+                borderStyle: isEmpty ? "dashed" : "solid",
+                borderRadius: 4,
+                boxShadow: "none",
+              }}
             >
               {display || <span className="opacity-40 text-xs">empty</span>}
             </motion.div>
