@@ -167,11 +167,12 @@ function actionKind(action?: string): ColorKind {
   }
 }
 const COLORS: Record<ColorKind, { bg: string; border: string; fg: string; glow: string }> = {
-  compare:       { bg: "oklch(0.78 0.17 80)",  border: "oklch(0.68 0.2 75)",  fg: "oklch(0.2 0.05 80)",  glow: "oklch(0.78 0.17 80)" },
-  swapError:     { bg: "oklch(0.65 0.22 25)",  border: "oklch(0.55 0.24 25)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.65 0.22 25)" },
-  successInsert: { bg: "oklch(0.72 0.19 145)", border: "oklch(0.6 0.21 145)", fg: "oklch(0.18 0.04 145)",glow: "oklch(0.72 0.19 145)" },
-  readWrite:     { bg: "oklch(0.7 0.15 230)",  border: "oklch(0.6 0.18 230)", fg: "oklch(0.98 0 0)",     glow: "oklch(0.7 0.15 230)" },
-  default:       { bg: "#FFFFFF",             border: "#D1D5DB",             fg: "#111827",              glow: "oklch(0.7 0.15 230)" },
+  // Flat pastels — no neon, no glow
+  compare:       { bg: "#FFF3B0", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel yellow
+  swapError:     { bg: "#FFCDD2", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel red
+  successInsert: { bg: "#C8E6C9", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // mint green
+  readWrite:     { bg: "#BBDEFB", border: "#333333", fg: "#1a1a1a", glow: "transparent" }, // pastel blue
+  default:       { bg: "#FFFFFF", border: "#333333", fg: "#1a1a1a", glow: "transparent" },
 };
 
 // ---------- Pointer detection ----------
@@ -179,15 +180,8 @@ const POINTER_NAME_RE = /^(i|j|k|l|m|n|p|q|r|s|x|y|idx|index|pos|left|right|lo|h
 function isPointerName(name: string) {
   return POINTER_NAME_RE.test(name);
 }
-// Distinct neon colors for pointers, cycled by name
-const POINTER_COLORS = [
-  "#22d3ee", // cyan   -> i
-  "#ec4899", // pink   -> j
-  "#a3e635", // lime
-  "#fbbf24", // amber
-  "#a78bfa", // violet
-  "#f472b6", // rose
-];
+// Flat dark colors for pointers — no neon
+const POINTER_COLORS = ["#1a1a1a", "#444444", "#2d3748", "#4a5568", "#555555", "#222222"];
 function pointerColor(name: string, allNames: string[]) {
   const idx = allNames.indexOf(name);
   return POINTER_COLORS[(idx >= 0 ? idx : 0) % POINTER_COLORS.length];
