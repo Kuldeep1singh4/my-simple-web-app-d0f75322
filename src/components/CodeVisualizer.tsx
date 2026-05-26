@@ -706,10 +706,10 @@ export function CodeVisualizer() {
 
           {/* Centered stage content */}
           <div
-            className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full overflow-hidden"
+            className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full"
             style={{
-              // Dynamic scale so shapes fit
               fontSize: "clamp(0.7rem, 1.6vmin, 1rem)",
+              overflow: "visible",
             }}
           >
             {error && (
