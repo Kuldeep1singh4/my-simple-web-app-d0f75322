@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
@@ -447,7 +447,7 @@ function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
   );
 }
 
-// ---------- Binary Tree (SVG-connected circle nodes) ----------
+// ---------- Binary Tree (strict level-balanced layout) ----------
 type LayoutTreeNode = {
   x: number;
   y: number;
@@ -456,58 +456,44 @@ type LayoutTreeNode = {
 };
 
 const TREE_NODE_R = 18;
-const TREE_LEVEL_H = 64;
+const TREE_LEVEL_H = 70;
 const TREE_LEAF_W = 56;
 
-function buildTreeLayout(node: JsonValue, depth: number): LayoutTreeNode | null {
+function layoutTree(
+  node: JsonValue,
+  depth: number,
+  cursor: { x: number },
+): LayoutTreeNode | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-  const leftLayout = buildTreeLayout((node.left as JsonValue) ?? null, depth + 1);
-  const rightLayout = buildTreeLayout((node.right as JsonValue) ?? null, depth + 1);
-  const children = [leftLayout, rightLayout].filter(Boolean) as LayoutTreeNode[];
 
-  let width: number;
-  if (!leftLayout && !rightLayout) {
-    width = TREE_LEAF_W;
+  const left = layoutTree((node.left as JsonValue) ?? null, depth + 1, cursor);
+  // y is purely a function of depth -> strict horizontal baselines per level
+  const y = depth * TREE_LEVEL_H + TREE_NODE_R + 8;
+
+  let x: number;
+  const children: LayoutTreeNode[] = [];
+  if (left) children.push(left);
+
+  const right = layoutTree((node.right as JsonValue) ?? null, depth + 1, cursor);
+  if (right) children.push(right);
+
+  if (left && right) {
+    x = (left.x + right.x) / 2;
+  } else if (left) {
+    x = left.x + TREE_LEAF_W / 2;
+  } else if (right) {
+    x = right.x - TREE_LEAF_W / 2;
   } else {
-    width =
-      (leftLayout ? subtreeWidth(leftLayout) : TREE_LEAF_W) +
-      (rightLayout ? subtreeWidth(rightLayout) : TREE_LEAF_W);
+    x = cursor.x + TREE_LEAF_W / 2;
+    cursor.x += TREE_LEAF_W;
   }
 
-  const self: LayoutTreeNode = { x: 0, y: depth * TREE_LEVEL_H + TREE_NODE_R + 4, label, children: [] };
+  return { x, y, label, children };
+}
 
-  if (leftLayout && rightLayout) {
-    const lW = subtreeWidth(leftLayout);
-    const rW = subtreeWidth(rightLayout);
-    shift(leftLayout, 0);
-    shift(rightLayout, lW);
-    self.x = (lW + (lW + rW)) / 2 - rW / 2; // midpoint between subtrees
-    self.x = lW; // place above boundary between subtrees
-    self.children = [leftLayout, rightLayout];
-  } else if (leftLayout) {
-    shift(leftLayout, 0);
-    self.x = subtreeWidth(leftLayout) - TREE_LEAF_W / 2;
-    self.children = [leftLayout];
-  } else if (rightLayout) {
-    shift(rightLayout, TREE_LEAF_W / 2);
-    self.x = TREE_LEAF_W / 2;
-    self.children = [rightLayout];
-  } else {
-    self.x = width / 2;
-  }
-  (self as LayoutTreeNode & { _w: number })._w = width;
-  return self;
-}
-function subtreeWidth(n: LayoutTreeNode): number {
-  return (n as LayoutTreeNode & { _w: number })._w ?? TREE_LEAF_W;
-}
-function shift(n: LayoutTreeNode, dx: number) {
-  n.x += dx;
-  n.children.forEach((c) => shift(c, dx));
-}
 function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
   out.push(n);
   n.children.forEach((c) => flatten(c, out));
@@ -515,10 +501,15 @@ function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const layout = buildTreeLayout(node, 0);
+  const layout = layoutTree(node, 0, { x: 0 });
   if (!layout) return null;
   const all = flatten(layout);
-  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R * 2 + 8;
+  const minX = Math.min(...all.map((n) => n.x));
+  // normalize so leftmost node sits at padding
+  const PAD = TREE_NODE_R + 8;
+  const dx = PAD - minX;
+  all.forEach((n) => (n.x += dx));
+  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R + 8;
   const height = Math.max(...all.map((n) => n.y)) + TREE_NODE_R + 8;
 
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
@@ -570,77 +561,60 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
   );
 }
 
-
-// ---------- Floating Tooltip (glassmorphism, anchored below) ----------
-function FloatingTooltip({
-  containerRef,
-  targetKey,
-  text,
-  visible,
+// ---------- Memory Board (primitives view) ----------
+function MemoryBoard({
+  vars,
+  active,
+  actionColor,
 }: {
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  targetKey: string | null;
-  text: string;
-  visible: boolean;
+  vars: { name: string; value: JsonValue }[];
+  active: ActiveSet;
+  actionColor: { bg: string; border: string; fg: string; glow: string };
 }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const tipRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    if (!visible || !targetKey || !containerRef.current) {
-      setPos(null);
-      return;
-    }
-    const cont = containerRef.current;
-    const cells = cont.querySelectorAll<HTMLElement>(`[data-active-key="${CSS.escape(targetKey)}"]`);
-    const cell = cells[0];
-    if (!cell) {
-      setPos(null);
-      return;
-    }
-    const cR = cont.getBoundingClientRect();
-    const eR = cell.getBoundingClientRect();
-    const tipW = tipRef.current?.offsetWidth ?? 240;
-    const tipH = tipRef.current?.offsetHeight ?? 50;
-    // Anchor below the element + pointer track (~40px buffer)
-    let x = eR.left - cR.left + eR.width / 2 - tipW / 2 + cont.scrollLeft;
-    let y = eR.bottom - cR.top + 48 + cont.scrollTop;
-    const maxX = cont.clientWidth - tipW - 8;
-    if (x < 8) x = 8;
-    if (x > maxX) x = Math.max(8, maxX);
-    // If overflowing bottom, flip above
-    if (y + tipH > cont.scrollTop + cont.clientHeight - 8) {
-      y = eR.top - cR.top - tipH - 12 + cont.scrollTop;
-    }
-    setPos({ x, y });
-  }, [visible, targetKey, text, containerRef]);
-
+  if (vars.length === 0) return null;
   return (
-    <AnimatePresence>
-      {visible && pos && (
-        <motion.div
-          ref={tipRef}
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
-          exit={{ opacity: 0, scale: 0.92 }}
-          transition={SPRING}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            maxWidth: 300,
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            background: "color-mix(in oklab, black 55%, transparent)",
-          }}
-          className="z-20 pointer-events-none rounded-xl px-3.5 py-2 text-xs text-white shadow-2xl border border-white/15"
-        >
-          <div className="leading-snug">{text}</div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div
+      className="grid gap-4"
+      style={{
+        gridTemplateColumns: `repeat(auto-fit, minmax(110px, max-content))`,
+        justifyContent: "center",
+      }}
+    >
+      {vars.map(({ name, value }) => {
+        const isActive = active.names.has(name);
+        const display = value === null || value === undefined ? "—" : formatPrimitive(value);
+        return (
+          <motion.div
+            key={name}
+            layout
+            transition={SPRING}
+            animate={{
+              backgroundColor: isActive ? actionColor.bg : "#FFFFFF",
+              color: isActive ? actionColor.fg : "#111",
+            }}
+            className="flex flex-col items-center justify-center px-4 py-3 min-w-[110px]"
+            style={{
+              border: "1px solid #333",
+              borderRadius: 6,
+              boxShadow: "none",
+            }}
+          >
+            <span
+              className="text-[10px] font-mono uppercase tracking-wider mb-1"
+              style={{ color: "#555" }}
+            >
+              {name}
+            </span>
+            <span className="font-mono font-semibold text-lg leading-tight">{display}</span>
+          </motion.div>
+        );
+      })}
+    </div>
   );
 }
+
+
+
 
 // ---------- Main ----------
 export function CodeVisualizer() {
@@ -779,10 +753,8 @@ export function CodeVisualizer() {
     .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
     .map(([name, value]) => ({ name, value }));
 
-  const tooltipTarget = useMemo(() => {
-    if (!current?.activeVariables?.length) return null;
-    return current.activeVariables[0];
-  }, [current]);
+
+
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background text-foreground">
@@ -907,60 +879,77 @@ export function CodeVisualizer() {
               </div>
             )}
 
-            {/* Holding cells */}
-            {holdingCells.length > 0 && (
-              <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
-            )}
+            {/* Primitives — Memory Board */}
+            {structureType === "primitives" ? (
+              <MemoryBoard
+                vars={scalars.map(([name, value]) => ({ name, value }))}
+                active={active}
+                actionColor={actionColor}
+              />
+            ) : (
+              <>
+                {/* Holding cells */}
+                {holdingCells.length > 0 && (
+                  <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
+                )}
 
-            {/* Arrays */}
-            {arrays.length > 0 && (
-              <div
-                className="flex flex-col items-center gap-6"
-                style={{ maxWidth: "min(100%, 90vw)" }}
-              >
-                {arrays.map(([name, val]) => (
-                  <ArrayRow
-                    key={name}
-                    name={name}
-                    value={val}
-                    active={active}
-                    pointers={pointersByArray.get(name) ?? []}
-                  />
+                {/* Arrays */}
+                {arrays.length > 0 && (
+                  <div
+                    className="flex flex-col items-center gap-6"
+                    style={{ maxWidth: "min(100%, 90vw)" }}
+                  >
+                    {arrays.map(([name, val]) => (
+                      <ArrayRow
+                        key={name}
+                        name={name}
+                        value={val}
+                        active={active}
+                        pointers={pointersByArray.get(name) ?? []}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Trees */}
+                {trees.map(([name, val]) => (
+                  <div key={name} className="flex flex-col items-center gap-1">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                      {name}
+                    </div>
+                    <TreeView node={val as { [k: string]: JsonValue }} />
+                  </div>
                 ))}
-              </div>
+
+                {/* Linked lists */}
+                {linked.map(([name, val]) => (
+                  <div key={name} className="flex flex-col items-center gap-1">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                      {name}
+                    </div>
+                    <LinkedListView head={val as { [k: string]: JsonValue }} />
+                  </div>
+                ))}
+              </>
             )}
-
-            {/* Trees */}
-            {trees.map(([name, val]) => (
-              <div key={name} className="flex flex-col items-center gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
-                  {name}
-                </div>
-                <TreeView node={val as { [k: string]: JsonValue }} />
-              </div>
-            ))}
-
-            {/* Linked lists */}
-            {linked.map(([name, val]) => (
-              <div key={name} className="flex flex-col items-center gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
-                  {name}
-                </div>
-                <LinkedListView head={val as { [k: string]: JsonValue }} />
-              </div>
-            ))}
           </div>
 
-          {/* Floating tooltip overlay (positioned absolutely within canvas) */}
+          {/* Pinned subtitle bar — stationary at bottom of visualization stage */}
           {current && (
-            <FloatingTooltip
-              containerRef={canvasRef}
-              targetKey={tooltipTarget}
-              text={current.explanation}
-              visible={!!tooltipTarget}
-            />
+            <div
+              className="absolute left-0 right-0 bottom-0 z-20 px-3 py-2 border-t border-gray-200 bg-white/95 backdrop-blur-sm"
+              style={{ pointerEvents: "none" }}
+            >
+              <div className="text-xs md:text-sm text-gray-800 text-center leading-snug line-clamp-2">
+                <span className="font-mono font-semibold text-gray-500 mr-2">
+                  Line {current.line}
+                </span>
+                {current.explanation}
+              </div>
+            </div>
           )}
         </div>
+
 
         {/* ===== Control Center (pinned, ~15% height) ===== */}
         <div className="h-[15vh] md:h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
