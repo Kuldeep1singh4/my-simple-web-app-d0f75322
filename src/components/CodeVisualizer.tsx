@@ -650,6 +650,7 @@ export function CodeVisualizer() {
   const setCode = (v: string) => setCodeByLang((prev) => ({ ...prev, [language]: v }));
   const [steps, setSteps] = useState<TraceStep[]>([]);
   const [complexity, setComplexity] = useState<Complexity | null>(null);
+  const [structureType, setStructureType] = useState<StructureType | null>(null);
   const [idx, setIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
