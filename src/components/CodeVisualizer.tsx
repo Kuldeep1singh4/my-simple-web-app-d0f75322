@@ -753,10 +753,8 @@ export function CodeVisualizer() {
     .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
     .map(([name, value]) => ({ name, value }));
 
-  const tooltipTarget = useMemo(() => {
-    if (!current?.activeVariables?.length) return null;
-    return current.activeVariables[0];
-  }, [current]);
+
+
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background text-foreground">
