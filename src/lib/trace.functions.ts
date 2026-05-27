@@ -56,7 +56,7 @@ export const traceCode = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<TraceResult> => {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return { steps: [], complexity: null, error: "GROQ_API_KEY is not configured.", traceError: null };
+      return { steps: [], complexity: null, structureType: null, error: "GROQ_API_KEY is not configured.", traceError: null };
     }
 
     try {
@@ -105,6 +105,7 @@ export const traceCode = createServerFn({ method: "POST" })
         return {
           steps: [],
           complexity: null,
+          structureType: null,
           error: `Groq API error (${res.status}): ${detail}`,
           traceError: null,
         };
@@ -114,7 +115,12 @@ export const traceCode = createServerFn({ method: "POST" })
         choices?: { message?: { content?: string } }[];
       };
       const content = json.choices?.[0]?.message?.content ?? "{}";
-      let parsed: { steps?: TraceStep[]; error?: string; complexity?: Complexity };
+      let parsed: {
+        steps?: TraceStep[];
+        error?: string;
+        complexity?: Complexity;
+        structureType?: string;
+      };
       try {
         parsed = JSON.parse(content);
       } catch {
@@ -122,16 +128,22 @@ export const traceCode = createServerFn({ method: "POST" })
         parsed = match ? JSON.parse(match[0]) : {};
       }
       if (typeof parsed.error === "string" && !Array.isArray(parsed.steps)) {
-        return { steps: [], complexity: null, error: null, traceError: parsed.error };
+        return { steps: [], complexity: null, structureType: null, error: null, traceError: parsed.error };
       }
       const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
       const complexity =
         parsed.complexity && typeof parsed.complexity.time === "string" && typeof parsed.complexity.space === "string"
           ? parsed.complexity
           : null;
-      return { steps, complexity, error: null, traceError: null };
+      const allowed: StructureType[] = ["array", "linked_list", "binary_tree", "primitives"];
+      const structureType =
+        typeof parsed.structureType === "string" && (allowed as string[]).includes(parsed.structureType)
+          ? (parsed.structureType as StructureType)
+          : null;
+      return { steps, complexity, structureType, error: null, traceError: null };
     } catch (err) {
       console.error("Trace failed", err);
-      return { steps: [], complexity: null, error: "Failed to reach the tracer service.", traceError: null };
+      return { steps: [], complexity: null, structureType: null, error: "Failed to reach the tracer service.", traceError: null };
     }
   });
+
