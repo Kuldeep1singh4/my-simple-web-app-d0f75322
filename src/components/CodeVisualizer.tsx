@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { traceCode, type TraceStep, type JsonValue, type Complexity } from "@/lib/trace.functions";
+import { traceCode, type TraceStep, type JsonValue, type Complexity, type StructureType } from "@/lib/trace.functions";
 
 type Language = "javascript" | "python" | "java" | "c" | "cpp";
 
