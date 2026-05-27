@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { traceCode, type TraceStep, type JsonValue, type Complexity } from "@/lib/trace.functions";
+import { traceCode, type TraceStep, type JsonValue, type Complexity, type StructureType } from "@/lib/trace.functions";
 
 type Language = "javascript" | "python" | "java" | "c" | "cpp";
 
@@ -359,73 +359,217 @@ function HoldingCells({
   );
 }
 
-// ---------- Linked List / Tree ----------
-function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
-  const nodes: { [k: string]: JsonValue }[] = [];
+// ---------- Linked List (flat Python-Tutor style) ----------
+function collectListNodes(head: JsonValue): { value: JsonValue; raw: { [k: string]: JsonValue } }[] {
+  const out: { value: JsonValue; raw: { [k: string]: JsonValue } }[] = [];
   let cur: JsonValue = head;
   let guard = 0;
   while (isLinkedNode(cur) && guard < 50) {
-    nodes.push(cur);
+    const valueKey =
+      "value" in cur ? "value" : Object.keys(cur).find((k) => k !== "next") ?? "value";
+    out.push({ value: cur[valueKey] as JsonValue, raw: cur });
     cur = cur.next;
     guard++;
   }
+  return out;
+}
+
+function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
+  const nodes = collectListNodes(head);
   return (
-    <div className="flex items-center gap-1 overflow-x-auto pb-1">
-      {nodes.map((n, i) => {
-        const valueKey = Object.keys(n).find((k) => k !== "next");
-        const display = valueKey ? formatPrimitive(n[valueKey]) : "{…}";
-        return (
-          <motion.div key={i} layout transition={SPRING} className="flex items-center gap-1">
-            <div className="px-3 py-2 rounded-md bg-card border border-border font-mono text-sm">
-              {display}
+    <div className="flex items-center" style={{ gap: 0 }}>
+      {nodes.map((n, i) => (
+        <div key={i} className="flex items-center">
+          {/* Node: [ Data | Next ] */}
+          <div
+            className="flex font-mono text-sm"
+            style={{
+              border: "1px solid #333",
+              borderRadius: 4,
+              background: "#FFFFFF",
+              color: "#111",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              className="px-3 py-1.5 font-semibold flex items-center justify-center min-w-10"
+              style={{ borderRight: "1px solid #333" }}
+            >
+              {formatPrimitive(n.value)}
             </div>
-            <span className="text-primary font-mono text-lg">→</span>
-          </motion.div>
-        );
-      })}
-      <span className="font-mono text-xs text-muted-foreground">
-        {cur === null ? "null" : "…"}
+            <div
+              className="px-2 py-1.5 text-[10px] uppercase tracking-wider flex items-center"
+              style={{ background: "#F1F3F5", color: "#555" }}
+            >
+              next
+            </div>
+          </div>
+          {/* Arrow */}
+          <svg
+            width="34"
+            height="14"
+            viewBox="0 0 34 14"
+            style={{ display: "block" }}
+            aria-hidden
+          >
+            <defs>
+              <marker
+                id={`ll-arrow-${i}`}
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="#333" />
+              </marker>
+            </defs>
+            <line
+              x1="0"
+              y1="7"
+              x2="28"
+              y2="7"
+              stroke="#333"
+              strokeWidth="1.5"
+              markerEnd={`url(#ll-arrow-${i})`}
+            />
+          </svg>
+        </div>
+      ))}
+      <span
+        className="font-mono text-xs px-2 py-1"
+        style={{ border: "1px dashed #999", color: "#555", borderRadius: 4, background: "#FAFAFA" }}
+      >
+        null
       </span>
     </div>
   );
 }
+
+// ---------- Binary Tree (SVG-connected circle nodes) ----------
+type LayoutTreeNode = {
+  x: number;
+  y: number;
+  label: string;
+  children: LayoutTreeNode[];
+};
+
+const TREE_NODE_R = 18;
+const TREE_LEVEL_H = 64;
+const TREE_LEAF_W = 56;
+
+function buildTreeLayout(node: JsonValue, depth: number): LayoutTreeNode | null {
+  if (!isPlainObject(node)) return null;
+  const valueKey =
+    "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
+  const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
+  const leftLayout = buildTreeLayout((node.left as JsonValue) ?? null, depth + 1);
+  const rightLayout = buildTreeLayout((node.right as JsonValue) ?? null, depth + 1);
+  const children = [leftLayout, rightLayout].filter(Boolean) as LayoutTreeNode[];
+
+  let width: number;
+  if (!leftLayout && !rightLayout) {
+    width = TREE_LEAF_W;
+  } else {
+    width =
+      (leftLayout ? subtreeWidth(leftLayout) : TREE_LEAF_W) +
+      (rightLayout ? subtreeWidth(rightLayout) : TREE_LEAF_W);
+  }
+
+  const self: LayoutTreeNode = { x: 0, y: depth * TREE_LEVEL_H + TREE_NODE_R + 4, label, children: [] };
+
+  if (leftLayout && rightLayout) {
+    const lW = subtreeWidth(leftLayout);
+    const rW = subtreeWidth(rightLayout);
+    shift(leftLayout, 0);
+    shift(rightLayout, lW);
+    self.x = (lW + (lW + rW)) / 2 - rW / 2; // midpoint between subtrees
+    self.x = lW; // place above boundary between subtrees
+    self.children = [leftLayout, rightLayout];
+  } else if (leftLayout) {
+    shift(leftLayout, 0);
+    self.x = subtreeWidth(leftLayout) - TREE_LEAF_W / 2;
+    self.children = [leftLayout];
+  } else if (rightLayout) {
+    shift(rightLayout, TREE_LEAF_W / 2);
+    self.x = TREE_LEAF_W / 2;
+    self.children = [rightLayout];
+  } else {
+    self.x = width / 2;
+  }
+  (self as LayoutTreeNode & { _w: number })._w = width;
+  return self;
+}
+function subtreeWidth(n: LayoutTreeNode): number {
+  return (n as LayoutTreeNode & { _w: number })._w ?? TREE_LEAF_W;
+}
+function shift(n: LayoutTreeNode, dx: number) {
+  n.x += dx;
+  n.children.forEach((c) => shift(c, dx));
+}
+function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
+  out.push(n);
+  n.children.forEach((c) => flatten(c, out));
+  return out;
+}
+
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const valueKey = Object.keys(node).find((k) => k !== "left" && k !== "right");
-  const display = valueKey ? formatPrimitive(node[valueKey]) : "•";
-  const left = node.left;
-  const right = node.right;
+  const layout = buildTreeLayout(node, 0);
+  if (!layout) return null;
+  const all = flatten(layout);
+  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R * 2 + 8;
+  const height = Math.max(...all.map((n) => n.y)) + TREE_NODE_R + 8;
+
+  const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const walk = (n: LayoutTreeNode) => {
+    n.children.forEach((c) => {
+      edges.push({ x1: n.x, y1: n.y, x2: c.x, y2: c.y });
+      walk(c);
+    });
+  };
+  walk(layout);
+
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="px-3 py-1.5 rounded-md bg-card border border-primary/40 font-mono text-sm">
-        {display}
-      </div>
-      {(isPlainObject(left) || isPlainObject(right)) && (
-        <div className="flex items-start gap-4">
-          <div className="flex flex-col items-center">
-            <div className="text-[10px] text-muted-foreground font-mono">L</div>
-            {isPlainObject(left) ? (
-              <TreeView node={left} />
-            ) : (
-              <div className="text-xs font-mono text-muted-foreground">
-                {left === undefined ? "—" : formatPrimitive(left as JsonValue)}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="text-[10px] text-muted-foreground font-mono">R</div>
-            {isPlainObject(right) ? (
-              <TreeView node={right} />
-            ) : (
-              <div className="text-xs font-mono text-muted-foreground">
-                {right === undefined ? "—" : formatPrimitive(right as JsonValue)}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <svg width={width} height={height} style={{ display: "block" }} aria-hidden>
+      {edges.map((e, i) => (
+        <line
+          key={i}
+          x1={e.x1}
+          y1={e.y1}
+          x2={e.x2}
+          y2={e.y2}
+          stroke="#333"
+          strokeWidth="1.25"
+        />
+      ))}
+      {all.map((n, i) => (
+        <g key={i}>
+          <circle
+            cx={n.x}
+            cy={n.y}
+            r={TREE_NODE_R}
+            fill="#FFFFFF"
+            stroke="#333"
+            strokeWidth="1.25"
+          />
+          <text
+            x={n.x}
+            y={n.y + 4}
+            textAnchor="middle"
+            fontFamily="ui-monospace, monospace"
+            fontSize="12"
+            fontWeight="600"
+            fill="#111"
+          >
+            {n.label}
+          </text>
+        </g>
+      ))}
+    </svg>
   );
 }
+
 
 // ---------- Floating Tooltip (glassmorphism, anchored below) ----------
 function FloatingTooltip({
@@ -506,6 +650,7 @@ export function CodeVisualizer() {
   const setCode = (v: string) => setCodeByLang((prev) => ({ ...prev, [language]: v }));
   const [steps, setSteps] = useState<TraceStep[]>([]);
   const [complexity, setComplexity] = useState<Complexity | null>(null);
+  const [structureType, setStructureType] = useState<StructureType | null>(null);
   const [idx, setIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -548,6 +693,7 @@ export function CodeVisualizer() {
     setError(null);
     setTraceError(null);
     setComplexity(null);
+    setStructureType(null);
     setPlaying(false);
     setIdx(-1);
     try {
@@ -559,9 +705,11 @@ export function CodeVisualizer() {
         setTraceError(res.traceError);
         setSteps([]);
         setComplexity(res.complexity);
+        setStructureType(res.structureType);
       } else {
         setSteps(res.steps);
         setComplexity(res.complexity);
+        setStructureType(res.structureType);
         setIdx(res.steps.length > 0 ? 0 : -1);
       }
     } catch {
@@ -576,12 +724,27 @@ export function CodeVisualizer() {
 
   const variables = current?.variables ?? {};
   const entries = Object.entries(variables);
+  // structureType acts as the routing hint. Fall back to value-shape detection.
+  const forceList = structureType === "linked_list";
+  const forceTree = structureType === "binary_tree";
+  const forceArray = structureType === "array";
   const arrays = entries.filter(([, v]) => Array.isArray(v)) as [string, JsonValue[]][];
-  const trees = entries.filter(([, v]) => isTreeNode(v));
-  const linked = entries.filter(([, v]) => !isTreeNode(v) && isLinkedNode(v));
+  const trees = forceList
+    ? []
+    : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
+  const linked = forceTree
+    ? []
+    : entries.filter(([, v]) =>
+        forceList ? isPlainObject(v) : !isTreeNode(v) && isLinkedNode(v),
+      );
   const scalars = entries.filter(
-    ([, v]) => !Array.isArray(v) && !isLinkedNode(v) && !isTreeNode(v)
+    ([n, v]) =>
+      !Array.isArray(v) &&
+      !linked.some(([ln]) => ln === n) &&
+      !trees.some(([tn]) => tn === n),
   );
+  // Mark forceArray to satisfy linter and reserve future use
+  void forceArray;
 
   // Pointer scalars: name matches and value is a valid integer index of some array
   const pointerScalarNames = useMemo(() => {
