@@ -693,6 +693,7 @@ export function CodeVisualizer() {
     setError(null);
     setTraceError(null);
     setComplexity(null);
+    setStructureType(null);
     setPlaying(false);
     setIdx(-1);
     try {
@@ -704,9 +705,11 @@ export function CodeVisualizer() {
         setTraceError(res.traceError);
         setSteps([]);
         setComplexity(res.complexity);
+        setStructureType(res.structureType);
       } else {
         setSteps(res.steps);
         setComplexity(res.complexity);
+        setStructureType(res.structureType);
         setIdx(res.steps.length > 0 ? 0 : -1);
       }
     } catch {
