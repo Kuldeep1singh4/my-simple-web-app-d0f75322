@@ -881,60 +881,77 @@ export function CodeVisualizer() {
               </div>
             )}
 
-            {/* Holding cells */}
-            {holdingCells.length > 0 && (
-              <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
-            )}
+            {/* Primitives — Memory Board */}
+            {structureType === "primitives" ? (
+              <MemoryBoard
+                vars={scalars.map(([name, value]) => ({ name, value }))}
+                active={active}
+                actionColor={actionColor}
+              />
+            ) : (
+              <>
+                {/* Holding cells */}
+                {holdingCells.length > 0 && (
+                  <HoldingCells cells={holdingCells} active={active} actionColor={actionColor} />
+                )}
 
-            {/* Arrays */}
-            {arrays.length > 0 && (
-              <div
-                className="flex flex-col items-center gap-6"
-                style={{ maxWidth: "min(100%, 90vw)" }}
-              >
-                {arrays.map(([name, val]) => (
-                  <ArrayRow
-                    key={name}
-                    name={name}
-                    value={val}
-                    active={active}
-                    pointers={pointersByArray.get(name) ?? []}
-                  />
+                {/* Arrays */}
+                {arrays.length > 0 && (
+                  <div
+                    className="flex flex-col items-center gap-6"
+                    style={{ maxWidth: "min(100%, 90vw)" }}
+                  >
+                    {arrays.map(([name, val]) => (
+                      <ArrayRow
+                        key={name}
+                        name={name}
+                        value={val}
+                        active={active}
+                        pointers={pointersByArray.get(name) ?? []}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Trees */}
+                {trees.map(([name, val]) => (
+                  <div key={name} className="flex flex-col items-center gap-1">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                      {name}
+                    </div>
+                    <TreeView node={val as { [k: string]: JsonValue }} />
+                  </div>
                 ))}
-              </div>
+
+                {/* Linked lists */}
+                {linked.map(([name, val]) => (
+                  <div key={name} className="flex flex-col items-center gap-1">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
+                      {name}
+                    </div>
+                    <LinkedListView head={val as { [k: string]: JsonValue }} />
+                  </div>
+                ))}
+              </>
             )}
-
-            {/* Trees */}
-            {trees.map(([name, val]) => (
-              <div key={name} className="flex flex-col items-center gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
-                  {name}
-                </div>
-                <TreeView node={val as { [k: string]: JsonValue }} />
-              </div>
-            ))}
-
-            {/* Linked lists */}
-            {linked.map(([name, val]) => (
-              <div key={name} className="flex flex-col items-center gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
-                  {name}
-                </div>
-                <LinkedListView head={val as { [k: string]: JsonValue }} />
-              </div>
-            ))}
           </div>
 
-          {/* Floating tooltip overlay (positioned absolutely within canvas) */}
+          {/* Pinned subtitle bar — stationary at bottom of visualization stage */}
           {current && (
-            <FloatingTooltip
-              containerRef={canvasRef}
-              targetKey={tooltipTarget}
-              text={current.explanation}
-              visible={!!tooltipTarget}
-            />
+            <div
+              className="absolute left-0 right-0 bottom-0 z-20 px-3 py-2 border-t border-gray-200 bg-white/95 backdrop-blur-sm"
+              style={{ pointerEvents: "none" }}
+            >
+              <div className="text-xs md:text-sm text-gray-800 text-center leading-snug line-clamp-2">
+                <span className="font-mono font-semibold text-gray-500 mr-2">
+                  Line {current.line}
+                </span>
+                {current.explanation}
+              </div>
+            </div>
           )}
         </div>
+
 
         {/* ===== Control Center (pinned, ~15% height) ===== */}
         <div className="h-[15vh] md:h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
