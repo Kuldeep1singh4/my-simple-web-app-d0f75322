@@ -724,12 +724,27 @@ export function CodeVisualizer() {
 
   const variables = current?.variables ?? {};
   const entries = Object.entries(variables);
+  // structureType acts as the routing hint. Fall back to value-shape detection.
+  const forceList = structureType === "linked_list";
+  const forceTree = structureType === "binary_tree";
+  const forceArray = structureType === "array";
   const arrays = entries.filter(([, v]) => Array.isArray(v)) as [string, JsonValue[]][];
-  const trees = entries.filter(([, v]) => isTreeNode(v));
-  const linked = entries.filter(([, v]) => !isTreeNode(v) && isLinkedNode(v));
+  const trees = forceList
+    ? []
+    : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
+  const linked = forceTree
+    ? []
+    : entries.filter(([, v]) =>
+        forceList ? isPlainObject(v) : !isTreeNode(v) && isLinkedNode(v),
+      );
   const scalars = entries.filter(
-    ([, v]) => !Array.isArray(v) && !isLinkedNode(v) && !isTreeNode(v)
+    ([n, v]) =>
+      !Array.isArray(v) &&
+      !linked.some(([ln]) => ln === n) &&
+      !trees.some(([tn]) => tn === n),
   );
+  // Mark forceArray to satisfy linter and reserve future use
+  void forceArray;
 
   // Pointer scalars: name matches and value is a valid integer index of some array
   const pointerScalarNames = useMemo(() => {
