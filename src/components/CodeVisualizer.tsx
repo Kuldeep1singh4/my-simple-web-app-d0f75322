@@ -447,7 +447,7 @@ function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
   );
 }
 
-// ---------- Binary Tree (SVG-connected circle nodes) ----------
+// ---------- Binary Tree (strict level-balanced layout) ----------
 type LayoutTreeNode = {
   x: number;
   y: number;
@@ -456,58 +456,44 @@ type LayoutTreeNode = {
 };
 
 const TREE_NODE_R = 18;
-const TREE_LEVEL_H = 64;
+const TREE_LEVEL_H = 70;
 const TREE_LEAF_W = 56;
 
-function buildTreeLayout(node: JsonValue, depth: number): LayoutTreeNode | null {
+function layoutTree(
+  node: JsonValue,
+  depth: number,
+  cursor: { x: number },
+): LayoutTreeNode | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-  const leftLayout = buildTreeLayout((node.left as JsonValue) ?? null, depth + 1);
-  const rightLayout = buildTreeLayout((node.right as JsonValue) ?? null, depth + 1);
-  const children = [leftLayout, rightLayout].filter(Boolean) as LayoutTreeNode[];
 
-  let width: number;
-  if (!leftLayout && !rightLayout) {
-    width = TREE_LEAF_W;
+  const left = layoutTree((node.left as JsonValue) ?? null, depth + 1, cursor);
+  // y is purely a function of depth -> strict horizontal baselines per level
+  const y = depth * TREE_LEVEL_H + TREE_NODE_R + 8;
+
+  let x: number;
+  const children: LayoutTreeNode[] = [];
+  if (left) children.push(left);
+
+  const right = layoutTree((node.right as JsonValue) ?? null, depth + 1, cursor);
+  if (right) children.push(right);
+
+  if (left && right) {
+    x = (left.x + right.x) / 2;
+  } else if (left) {
+    x = left.x + TREE_LEAF_W / 2;
+  } else if (right) {
+    x = right.x - TREE_LEAF_W / 2;
   } else {
-    width =
-      (leftLayout ? subtreeWidth(leftLayout) : TREE_LEAF_W) +
-      (rightLayout ? subtreeWidth(rightLayout) : TREE_LEAF_W);
+    x = cursor.x + TREE_LEAF_W / 2;
+    cursor.x += TREE_LEAF_W;
   }
 
-  const self: LayoutTreeNode = { x: 0, y: depth * TREE_LEVEL_H + TREE_NODE_R + 4, label, children: [] };
+  return { x, y, label, children };
+}
 
-  if (leftLayout && rightLayout) {
-    const lW = subtreeWidth(leftLayout);
-    const rW = subtreeWidth(rightLayout);
-    shift(leftLayout, 0);
-    shift(rightLayout, lW);
-    self.x = (lW + (lW + rW)) / 2 - rW / 2; // midpoint between subtrees
-    self.x = lW; // place above boundary between subtrees
-    self.children = [leftLayout, rightLayout];
-  } else if (leftLayout) {
-    shift(leftLayout, 0);
-    self.x = subtreeWidth(leftLayout) - TREE_LEAF_W / 2;
-    self.children = [leftLayout];
-  } else if (rightLayout) {
-    shift(rightLayout, TREE_LEAF_W / 2);
-    self.x = TREE_LEAF_W / 2;
-    self.children = [rightLayout];
-  } else {
-    self.x = width / 2;
-  }
-  (self as LayoutTreeNode & { _w: number })._w = width;
-  return self;
-}
-function subtreeWidth(n: LayoutTreeNode): number {
-  return (n as LayoutTreeNode & { _w: number })._w ?? TREE_LEAF_W;
-}
-function shift(n: LayoutTreeNode, dx: number) {
-  n.x += dx;
-  n.children.forEach((c) => shift(c, dx));
-}
 function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
   out.push(n);
   n.children.forEach((c) => flatten(c, out));
@@ -515,10 +501,15 @@ function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const layout = buildTreeLayout(node, 0);
+  const layout = layoutTree(node, 0, { x: 0 });
   if (!layout) return null;
   const all = flatten(layout);
-  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R * 2 + 8;
+  const minX = Math.min(...all.map((n) => n.x));
+  // normalize so leftmost node sits at padding
+  const PAD = TREE_NODE_R + 8;
+  const dx = PAD - minX;
+  all.forEach((n) => (n.x += dx));
+  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R + 8;
   const height = Math.max(...all.map((n) => n.y)) + TREE_NODE_R + 8;
 
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
@@ -569,6 +560,59 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
     </svg>
   );
 }
+
+// ---------- Memory Board (primitives view) ----------
+function MemoryBoard({
+  vars,
+  active,
+  actionColor,
+}: {
+  vars: { name: string; value: JsonValue }[];
+  active: ActiveSet;
+  actionColor: { bg: string; border: string; fg: string; glow: string };
+}) {
+  if (vars.length === 0) return null;
+  return (
+    <div
+      className="grid gap-4"
+      style={{
+        gridTemplateColumns: `repeat(auto-fit, minmax(110px, max-content))`,
+        justifyContent: "center",
+      }}
+    >
+      {vars.map(({ name, value }) => {
+        const isActive = active.names.has(name);
+        const display = value === null || value === undefined ? "—" : formatPrimitive(value);
+        return (
+          <motion.div
+            key={name}
+            layout
+            transition={SPRING}
+            animate={{
+              backgroundColor: isActive ? actionColor.bg : "#FFFFFF",
+              color: isActive ? actionColor.fg : "#111",
+            }}
+            className="flex flex-col items-center justify-center px-4 py-3 min-w-[110px]"
+            style={{
+              border: "1px solid #333",
+              borderRadius: 6,
+              boxShadow: "none",
+            }}
+          >
+            <span
+              className="text-[10px] font-mono uppercase tracking-wider mb-1"
+              style={{ color: "#555" }}
+            >
+              {name}
+            </span>
+            <span className="font-mono font-semibold text-lg leading-tight">{display}</span>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 
 // ---------- Floating Tooltip (glassmorphism, anchored below) ----------
