@@ -822,7 +822,58 @@ export function CodeVisualizer() {
             className="h-full text-sm"
           />
         </div>
+
+        {/* ===== Terminal / Console pane ===== */}
+        <div
+          className={`shrink-0 flex flex-col border-t border-border ${
+            terminalOpen ? "h-32 md:h-56" : "h-9"
+          }`}
+          style={{ background: "#1E1E1E", transition: "height 200ms ease" }}
+        >
+          <button
+            type="button"
+            onClick={() => setTerminalOpen((v) => !v)}
+            className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-white/10 text-xs font-mono uppercase tracking-wider text-gray-300 hover:text-white"
+            aria-label="Toggle console"
+          >
+            <span className="flex items-center gap-2">
+              <TerminalIcon className="h-3.5 w-3.5" />
+              Console
+            </span>
+            {terminalOpen ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronUp className="h-3.5 w-3.5" />
+            )}
+          </button>
+          {terminalOpen && (
+            <div
+              ref={terminalScrollRef}
+              className="flex-1 min-h-0 overflow-y-auto px-3 py-2"
+              style={{
+                fontFamily: '"Fira Code", "Courier New", ui-monospace, monospace',
+                fontSize: "12px",
+                lineHeight: 1.5,
+                color: "#D4D4D4",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {consoleText ? (
+                <>
+                  {consoleText}
+                  <span className="inline-block w-2 h-3.5 align-text-bottom bg-gray-300 ml-0.5 animate-pulse" />
+                </>
+              ) : (
+                <span style={{ color: "#6A6A6A" }}>
+                  &gt; Program output will appear here…
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
 
       {/* ===== Right column: Canvas + Controls ===== */}
       <div className="flex flex-col w-full md:w-1/2 h-[65%] md:h-full min-h-0">
