@@ -1025,7 +1025,8 @@ export function CodeVisualizer() {
         <div className="h-[15vh] md:h-[15%] min-h-[64px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center">
 
           {/* Buttons */}
-          <div className="flex items-center justify-center gap-2 pb-2 px-3">
+          <div className="flex items-center justify-center gap-2 px-3">
+
             <Button
               variant="outline"
               size="icon"
