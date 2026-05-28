@@ -1022,24 +1022,7 @@ export function CodeVisualizer() {
 
 
         {/* ===== Control Center (pinned, ~15% height) ===== */}
-        <div className="h-[15vh] md:h-[15%] min-h-[88px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex flex-col">
-          {/* Subtitle / explanation */}
-          <div className="flex-1 min-h-0 px-3 py-1.5 flex items-center justify-center overflow-hidden">
-            {traceError ? (
-              <div className="text-xs text-destructive font-mono text-center line-clamp-2">
-                {traceError}
-              </div>
-            ) : current ? (
-              <div className="text-xs md:text-sm text-foreground/90 text-center line-clamp-2 leading-snug">
-                <span className="text-primary font-semibold mr-1.5">Line {current.line}</span>
-                {current.explanation}
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground italic">
-                Controls
-              </div>
-            )}
-          </div>
+        <div className="h-[15vh] md:h-[15%] min-h-[64px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center">
 
           {/* Buttons */}
           <div className="flex items-center justify-center gap-2 pb-2 px-3">
