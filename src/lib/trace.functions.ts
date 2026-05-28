@@ -23,17 +23,6 @@ export type ActionType =
   | "success"
   | "error"
   | "init"
-  | "return";
-
-export type ActionType =
-  | "compare"
-  | "swap"
-  | "insert"
-  | "read"
-  | "write"
-  | "success"
-  | "error"
-  | "init"
   | "return"
   | "fast-forward";
 
