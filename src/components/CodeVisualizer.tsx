@@ -630,6 +630,8 @@ export function CodeVisualizer() {
   const [error, setError] = useState<string | null>(null);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(true);
+  const terminalScrollRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<EditorView | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const trace = useServerFn(traceCode);
