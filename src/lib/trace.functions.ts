@@ -45,6 +45,9 @@ export type TraceStep = {
   actionType?: ActionType | string;
   consoleOutput?: string | null;
 };
+
+export type Complexity = {
+  time: string;
   space: string;
 };
 
