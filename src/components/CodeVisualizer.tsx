@@ -8,7 +8,7 @@ import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
 import { StateField, StateEffect, type Extension } from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { Play, Pause, StepForward, StepBack, Sparkles, Loader2 } from "lucide-react";
+import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Terminal as TerminalIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
