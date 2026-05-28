@@ -755,6 +755,23 @@ export function CodeVisualizer() {
     .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
     .map(([name, value]) => ({ name, value }));
 
+  // Accumulated stdout up to and including the current step
+  const consoleText = useMemo(() => {
+    if (steps.length === 0 || idx < 0) return "";
+    let out = "";
+    for (let i = 0; i <= idx && i < steps.length; i++) {
+      const c = steps[i]?.consoleOutput;
+      if (typeof c === "string" && c.length > 0) out += c;
+    }
+    return out;
+  }, [steps, idx]);
+
+  useEffect(() => {
+    const el = terminalScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [consoleText]);
+
+
 
 
 
