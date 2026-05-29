@@ -1134,14 +1134,18 @@ export function CodeVisualizer() {
                 ))}
 
                 {/* Linked lists */}
-                {linked.map(([name, val]) => (
+                {linkedRender.map(([name, val]) => (
                   <div key={name} className="flex flex-col items-center gap-1">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
                       {name}
                     </div>
-                    <LinkedListView head={val as { [k: string]: JsonValue }} />
+                    <LinkedListView
+                      head={val as { [k: string]: JsonValue }}
+                      pointers={forceList ? listPointers : []}
+                    />
                   </div>
                 ))}
+
               </>
             )}
           </div>
