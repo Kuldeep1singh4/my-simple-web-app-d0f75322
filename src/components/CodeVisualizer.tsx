@@ -783,18 +783,50 @@ export function CodeVisualizer() {
   const trees = forceList
     ? []
     : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
-  const linked = forceTree
-    ? []
-    : entries.filter(([, v]) =>
-        forceList ? isPlainObject(v) : !isTreeNode(v) && isLinkedNode(v),
-      );
+
+  // ----- Linked list partitioning -----
+  // In linked_list mode, choose ONE canonical chain and turn all other
+  // node-shaped variables (and null head-like vars) into floating pointer labels.
+  type ListPtr = { name: string; targetIndex: number | null };
+  let linkedRender: [string, JsonValue][] = [];
+  let listPointers: ListPtr[] = [];
+  const linkedPointerNames = new Set<string>();
+  if (forceList) {
+    const nodeLike = entries.filter(([, v]) => v === null || isPlainObject(v));
+    const chains = nodeLike
+      .filter(([, v]) => isLinkedNode(v))
+      .map(([n, v]) => ({ name: n, val: v, len: collectListNodes(v).length }))
+      .sort((a, b) => b.len - a.len);
+    const preferred =
+      chains.find((c) => /^(head|list|root|start)$/i.test(c.name)) ?? chains[0];
+    if (preferred) {
+      linkedRender = [[preferred.name, preferred.val]];
+      const chainNodes = collectListNodes(preferred.val);
+      const chainKeys = chainNodes.map((n) => JSON.stringify(n.raw));
+      for (const [n, v] of nodeLike) {
+        if (n === preferred.name) continue;
+        linkedPointerNames.add(n);
+        if (v === null) listPointers.push({ name: n, targetIndex: null });
+        else {
+          const key = JSON.stringify(v);
+          const i = chainKeys.indexOf(key);
+          listPointers.push({ name: n, targetIndex: i >= 0 ? i : null });
+        }
+      }
+    }
+  } else {
+    linkedRender = forceTree
+      ? []
+      : entries.filter(([, v]) => !isTreeNode(v) && isLinkedNode(v));
+  }
+
   const scalars = entries.filter(
     ([n, v]) =>
       !Array.isArray(v) &&
-      !linked.some(([ln]) => ln === n) &&
-      !trees.some(([tn]) => tn === n),
+      !linkedRender.some(([ln]) => ln === n) &&
+      !trees.some(([tn]) => tn === n) &&
+      !linkedPointerNames.has(n),
   );
-  // Mark forceArray to satisfy linter and reserve future use
   void forceArray;
 
   // Pointer scalars: name matches and value is a valid integer index of some array
@@ -829,6 +861,7 @@ export function CodeVisualizer() {
   const holdingCells = nonPointerScalars
     .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
     .map(([name, value]) => ({ name, value }));
+
 
   // Accumulated stdout up to and including the current step
   const consoleText = useMemo(() => {
