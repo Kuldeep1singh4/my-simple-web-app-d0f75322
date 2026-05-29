@@ -8,7 +8,8 @@ import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
 import { StateField, StateEffect, type Extension } from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Terminal as TerminalIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Terminal as TerminalIcon } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -360,11 +361,26 @@ function HoldingCells({
 }
 
 // ---------- Linked List (flat Python-Tutor style) ----------
+function hasValidValue(v: JsonValue): boolean {
+  if (!isPlainObject(v)) return false;
+  const valueKey =
+    "value" in v ? "value" : Object.keys(v).find((k) => k !== "next");
+  if (!valueKey) return false;
+  const val = v[valueKey];
+  return val !== null && val !== undefined && val !== "";
+}
+
 function collectListNodes(head: JsonValue): { value: JsonValue; raw: { [k: string]: JsonValue } }[] {
   const out: { value: JsonValue; raw: { [k: string]: JsonValue } }[] = [];
   let cur: JsonValue = head;
   let guard = 0;
   while (isLinkedNode(cur) && guard < 50) {
+    // Skip allocated-but-empty node shapes
+    if (!hasValidValue(cur)) {
+      cur = cur.next;
+      guard++;
+      continue;
+    }
     const valueKey =
       "value" in cur ? "value" : Object.keys(cur).find((k) => k !== "next") ?? "value";
     out.push({ value: cur[valueKey] as JsonValue, raw: cur });
@@ -374,78 +390,137 @@ function collectListNodes(head: JsonValue): { value: JsonValue; raw: { [k: strin
   return out;
 }
 
-function LinkedListView({ head }: { head: { [k: string]: JsonValue } }) {
+function LinkedListView({
+  head,
+  pointers = [],
+}: {
+  head: { [k: string]: JsonValue };
+  pointers?: { name: string; targetIndex: number | null }[];
+}) {
   const nodes = collectListNodes(head);
-  return (
-    <div className="flex items-center" style={{ gap: 0 }}>
-      {nodes.map((n, i) => (
-        <div key={i} className="flex items-center">
-          {/* Node: [ Data | Next ] */}
-          <div
-            className="flex font-mono text-sm"
-            style={{
-              border: "1px solid #333",
-              borderRadius: 4,
-              background: "#FFFFFF",
-              color: "#111",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              className="px-3 py-1.5 font-semibold flex items-center justify-center min-w-10"
-              style={{ borderRight: "1px solid #333" }}
-            >
-              {formatPrimitive(n.value)}
-            </div>
-            <div
-              className="px-2 py-1.5 text-[10px] uppercase tracking-wider flex items-center"
-              style={{ background: "#F1F3F5", color: "#555" }}
-            >
-              next
-            </div>
-          </div>
-          {/* Arrow */}
-          <svg
-            width="34"
-            height="14"
-            viewBox="0 0 34 14"
-            style={{ display: "block" }}
-            aria-hidden
-          >
-            <defs>
-              <marker
-                id={`ll-arrow-${i}`}
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M0,0 L10,5 L0,10 z" fill="#333" />
-              </marker>
-            </defs>
-            <line
-              x1="0"
-              y1="7"
-              x2="28"
-              y2="7"
-              stroke="#333"
-              strokeWidth="1.5"
-              markerEnd={`url(#ll-arrow-${i})`}
-            />
-          </svg>
-        </div>
-      ))}
+  if (nodes.length === 0) {
+    return (
       <span
         className="font-mono text-xs px-2 py-1"
         style={{ border: "1px dashed #999", color: "#555", borderRadius: 4, background: "#FAFAFA" }}
       >
         null
       </span>
+    );
+  }
+  const NODE_W = 84; // approx width of [data|next] block
+  const ARROW_W = 34;
+  const SLOT_W = NODE_W + ARROW_W;
+
+  // Group pointers by targetIndex
+  const ptrsByIdx = new Map<number, string[]>();
+  const nullPtrs: string[] = [];
+  for (const p of pointers) {
+    if (p.targetIndex == null) nullPtrs.push(p.name);
+    else {
+      if (!ptrsByIdx.has(p.targetIndex)) ptrsByIdx.set(p.targetIndex, []);
+      ptrsByIdx.get(p.targetIndex)!.push(p.name);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start" style={{ minHeight: 86 }}>
+      {/* Pointer labels row */}
+      <div className="relative" style={{ height: 28, width: nodes.length * SLOT_W }}>
+        {nodes.map((_, i) => {
+          const labels = ptrsByIdx.get(i);
+          if (!labels || labels.length === 0) return null;
+          return (
+            <div
+              key={i}
+              className="absolute flex flex-col items-center font-mono"
+              style={{ left: i * SLOT_W, width: NODE_W }}
+            >
+              <span className="text-[11px] font-semibold" style={{ color: "#1a1a1a" }}>
+                {labels.join(", ")}
+              </span>
+              <span className="text-base leading-none" style={{ color: "#1a1a1a" }}>
+                ↓
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center" style={{ gap: 0 }}>
+        {nodes.map((n, i) => (
+          <div key={i} className="flex items-center" style={{ width: SLOT_W }}>
+            {/* Node: [ Data | Next ] */}
+            <div
+              className="flex font-mono text-sm"
+              style={{
+                border: "1px solid #333",
+                borderRadius: 4,
+                background: "#FFFFFF",
+                color: "#111",
+                overflow: "hidden",
+                width: NODE_W,
+              }}
+            >
+              <div
+                className="px-3 py-1.5 font-semibold flex items-center justify-center flex-1"
+                style={{ borderRight: "1px solid #333" }}
+              >
+                {formatPrimitive(n.value)}
+              </div>
+              <div
+                className="px-2 py-1.5 text-[10px] uppercase tracking-wider flex items-center"
+                style={{ background: "#F1F3F5", color: "#555" }}
+              >
+                next
+              </div>
+            </div>
+            {/* Arrow */}
+            <svg width={ARROW_W} height="14" viewBox="0 0 34 14" style={{ display: "block" }} aria-hidden>
+              <defs>
+                <marker
+                  id={`ll-arrow-${i}`}
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0,0 L10,5 L0,10 z" fill="#333" />
+                </marker>
+              </defs>
+              <line
+                x1="0"
+                y1="7"
+                x2="28"
+                y2="7"
+                stroke="#333"
+                strokeWidth="1.5"
+                markerEnd={`url(#ll-arrow-${i})`}
+              />
+            </svg>
+          </div>
+        ))}
+        <span
+          className="font-mono text-xs px-2 py-1"
+          style={{ border: "1px dashed #999", color: "#555", borderRadius: 4, background: "#FAFAFA" }}
+        >
+          null
+        </span>
+        {nullPtrs.length > 0 && (
+          <span
+            className="ml-3 font-mono text-[11px] font-semibold"
+            style={{ color: "#1a1a1a" }}
+          >
+            {nullPtrs.join(", ")} → null
+          </span>
+        )}
+      </div>
     </div>
   );
 }
+
 
 // ---------- Binary Tree (strict level-balanced layout) ----------
 type LayoutTreeNode = {
@@ -630,7 +705,8 @@ export function CodeVisualizer() {
   const [error, setError] = useState<string | null>(null);
   const [traceError, setTraceError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(true);
+  const [leftTab, setLeftTab] = useState<"code" | "console">("code");
+  const [unseenConsole, setUnseenConsole] = useState(false);
   const terminalScrollRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<EditorView | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -708,18 +784,50 @@ export function CodeVisualizer() {
   const trees = forceList
     ? []
     : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
-  const linked = forceTree
-    ? []
-    : entries.filter(([, v]) =>
-        forceList ? isPlainObject(v) : !isTreeNode(v) && isLinkedNode(v),
-      );
+
+  // ----- Linked list partitioning -----
+  // In linked_list mode, choose ONE canonical chain and turn all other
+  // node-shaped variables (and null head-like vars) into floating pointer labels.
+  type ListPtr = { name: string; targetIndex: number | null };
+  let linkedRender: [string, JsonValue][] = [];
+  let listPointers: ListPtr[] = [];
+  const linkedPointerNames = new Set<string>();
+  if (forceList) {
+    const nodeLike = entries.filter(([, v]) => v === null || isPlainObject(v));
+    const chains = nodeLike
+      .filter(([, v]) => isLinkedNode(v))
+      .map(([n, v]) => ({ name: n, val: v, len: collectListNodes(v).length }))
+      .sort((a, b) => b.len - a.len);
+    const preferred =
+      chains.find((c) => /^(head|list|root|start)$/i.test(c.name)) ?? chains[0];
+    if (preferred) {
+      linkedRender = [[preferred.name, preferred.val]];
+      const chainNodes = collectListNodes(preferred.val);
+      const chainKeys = chainNodes.map((n) => JSON.stringify(n.raw));
+      for (const [n, v] of nodeLike) {
+        if (n === preferred.name) continue;
+        linkedPointerNames.add(n);
+        if (v === null) listPointers.push({ name: n, targetIndex: null });
+        else {
+          const key = JSON.stringify(v);
+          const i = chainKeys.indexOf(key);
+          listPointers.push({ name: n, targetIndex: i >= 0 ? i : null });
+        }
+      }
+    }
+  } else {
+    linkedRender = forceTree
+      ? []
+      : entries.filter(([, v]) => !isTreeNode(v) && isLinkedNode(v));
+  }
+
   const scalars = entries.filter(
     ([n, v]) =>
       !Array.isArray(v) &&
-      !linked.some(([ln]) => ln === n) &&
-      !trees.some(([tn]) => tn === n),
+      !linkedRender.some(([ln]) => ln === n) &&
+      !trees.some(([tn]) => tn === n) &&
+      !linkedPointerNames.has(n),
   );
-  // Mark forceArray to satisfy linter and reserve future use
   void forceArray;
 
   // Pointer scalars: name matches and value is a valid integer index of some array
@@ -755,6 +863,7 @@ export function CodeVisualizer() {
     .filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
     .map(([name, value]) => ({ name, value }));
 
+
   // Accumulated stdout up to and including the current step
   const consoleText = useMemo(() => {
     if (steps.length === 0 || idx < 0) return "";
@@ -771,13 +880,28 @@ export function CodeVisualizer() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [consoleText]);
 
+  // Track unseen console output (only when user is on the Code tab)
+  useEffect(() => {
+    if (!consoleText) return;
+    if (leftTab === "console") {
+      setUnseenConsole(false);
+    } else {
+      setUnseenConsole(true);
+    }
+  }, [consoleText, leftTab]);
+
+  useEffect(() => {
+    if (leftTab === "console") setUnseenConsole(false);
+  }, [leftTab]);
+
+
 
 
 
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background text-foreground">
-      {/* ===== Editor (Mobile: top 35% / Desktop: left 50%, full height) ===== */}
+    <div className="flex flex-col md:flex-row h-[100dvh] w-[100vw] overflow-hidden bg-background text-foreground">
+      {/* ===== Editor / Console (Mobile: top 35% / Desktop: left 50%, full height) ===== */}
       <div className="flex flex-col w-full md:w-1/2 h-[35%] md:h-full border-b md:border-b-0 md:border-r border-border min-h-0">
         <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50 gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -808,71 +932,90 @@ export function CodeVisualizer() {
             </Button>
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#1e1e2e]">
-          <CodeMirror
-            value={code}
-            onChange={setCode}
-            theme="dark"
-            extensions={[languageExtension(language), activeLineField, lineTheme]}
-            basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
-            onCreateEditor={(view) => {
-              editorRef.current = view;
-            }}
-            height="100%"
-            className="h-full text-sm"
-          />
-        </div>
 
-        {/* ===== Terminal / Console pane ===== */}
-        <div
-          className={`shrink-0 flex flex-col border-t border-border ${
-            terminalOpen ? "h-32 md:h-56" : "h-9"
-          }`}
-          style={{ background: "#1E1E1E", transition: "height 200ms ease" }}
-        >
+        {/* ===== Tab toggle: Code | Console ===== */}
+        <div className="flex items-stretch border-b border-border bg-card/40 shrink-0">
           <button
             type="button"
-            onClick={() => setTerminalOpen((v) => !v)}
-            className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-white/10 text-xs font-mono uppercase tracking-wider text-gray-300 hover:text-white"
-            aria-label="Toggle console"
+            onClick={() => setLeftTab("code")}
+            className={`px-3 h-8 text-xs font-mono uppercase tracking-wider border-r border-border transition-colors ${
+              leftTab === "code"
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <span className="flex items-center gap-2">
-              <TerminalIcon className="h-3.5 w-3.5" />
-              Console
-            </span>
-            {terminalOpen ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronUp className="h-3.5 w-3.5" />
+            Code
+          </button>
+          <button
+            type="button"
+            onClick={() => setLeftTab("console")}
+            className={`relative px-3 h-8 text-xs font-mono uppercase tracking-wider border-r border-border transition-colors flex items-center gap-1.5 ${
+              leftTab === "console"
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <TerminalIcon className="h-3 w-3" />
+            Console
+            {unseenConsole && leftTab !== "console" && (
+              <span
+                className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full"
+                style={{ background: "#ef4444" }}
+                aria-label="New output"
+              />
             )}
           </button>
-          {terminalOpen && (
-            <div
-              ref={terminalScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto px-3 py-2"
-              style={{
-                fontFamily: '"Fira Code", "Courier New", ui-monospace, monospace',
-                fontSize: "12px",
-                lineHeight: 1.5,
-                color: "#D4D4D4",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
+        </div>
+
+        {/* ===== Tab body — same container, swap content ===== */}
+        <div className="flex-1 min-h-0 relative">
+          <div
+            className={`absolute inset-0 overflow-y-auto bg-[#1e1e2e] ${
+              leftTab === "code" ? "block" : "hidden"
+            }`}
+          >
+            <CodeMirror
+              value={code}
+              onChange={setCode}
+              theme="dark"
+              extensions={[languageExtension(language), activeLineField, lineTheme]}
+              basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
+              onCreateEditor={(view) => {
+                editorRef.current = view;
               }}
-            >
-              {consoleText ? (
-                <>
-                  {consoleText}
-                  <span className="inline-block w-2 h-3.5 align-text-bottom bg-gray-300 ml-0.5 animate-pulse" />
-                </>
-              ) : (
-                <span style={{ color: "#6A6A6A" }}>
-                  &gt; Program output will appear here…
-                </span>
-              )}
-            </div>
-          )}
+              height="100%"
+              className="h-full text-sm"
+            />
+          </div>
+          <div
+            ref={terminalScrollRef}
+            className={`absolute inset-0 overflow-y-auto px-3 py-2 ${
+              leftTab === "console" ? "block" : "hidden"
+            }`}
+            style={{
+              background: "#1E1E1E",
+              fontFamily: '"Fira Code", "Courier New", ui-monospace, monospace',
+              fontSize: "12px",
+              lineHeight: 1.5,
+              color: "#D4D4D4",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {consoleText ? (
+              <>
+                {consoleText}
+                <span className="inline-block w-2 h-3.5 align-text-bottom bg-gray-300 ml-0.5 animate-pulse" />
+              </>
+            ) : (
+              <span style={{ color: "#6A6A6A" }}>
+                &gt; Program output will appear here…
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
 
 
       {/* ===== Right column: Canvas + Controls ===== */}
@@ -992,14 +1135,18 @@ export function CodeVisualizer() {
                 ))}
 
                 {/* Linked lists */}
-                {linked.map(([name, val]) => (
+                {linkedRender.map(([name, val]) => (
                   <div key={name} className="flex flex-col items-center gap-1">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
                       {name}
                     </div>
-                    <LinkedListView head={val as { [k: string]: JsonValue }} />
+                    <LinkedListView
+                      head={val as { [k: string]: JsonValue }}
+                      pointers={forceList ? listPointers : []}
+                    />
                   </div>
                 ))}
+
               </>
             )}
           </div>
@@ -1022,7 +1169,7 @@ export function CodeVisualizer() {
 
 
         {/* ===== Control Center (pinned, ~15% height) ===== */}
-        <div className="h-[15vh] md:h-[15%] min-h-[64px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center">
+        <div className="h-[15dvh] md:h-[15%] min-h-[64px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center">
 
           {/* Buttons */}
           <div className="flex items-center justify-center gap-2 px-3">
