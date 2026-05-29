@@ -899,8 +899,8 @@ export function CodeVisualizer() {
 
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-background text-foreground">
-      {/* ===== Editor (Mobile: top 35% / Desktop: left 50%, full height) ===== */}
+    <div className="flex flex-col md:flex-row h-[100dvh] w-[100vw] overflow-hidden bg-background text-foreground">
+      {/* ===== Editor / Console (Mobile: top 35% / Desktop: left 50%, full height) ===== */}
       <div className="flex flex-col w-full md:w-1/2 h-[35%] md:h-full border-b md:border-b-0 md:border-r border-border min-h-0">
         <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50 gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -931,71 +931,90 @@ export function CodeVisualizer() {
             </Button>
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#1e1e2e]">
-          <CodeMirror
-            value={code}
-            onChange={setCode}
-            theme="dark"
-            extensions={[languageExtension(language), activeLineField, lineTheme]}
-            basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
-            onCreateEditor={(view) => {
-              editorRef.current = view;
-            }}
-            height="100%"
-            className="h-full text-sm"
-          />
-        </div>
 
-        {/* ===== Terminal / Console pane ===== */}
-        <div
-          className={`shrink-0 flex flex-col border-t border-border ${
-            terminalOpen ? "h-32 md:h-56" : "h-9"
-          }`}
-          style={{ background: "#1E1E1E", transition: "height 200ms ease" }}
-        >
+        {/* ===== Tab toggle: Code | Console ===== */}
+        <div className="flex items-stretch border-b border-border bg-card/40 shrink-0">
           <button
             type="button"
-            onClick={() => setTerminalOpen((v) => !v)}
-            className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-white/10 text-xs font-mono uppercase tracking-wider text-gray-300 hover:text-white"
-            aria-label="Toggle console"
+            onClick={() => setLeftTab("code")}
+            className={`px-3 h-8 text-xs font-mono uppercase tracking-wider border-r border-border transition-colors ${
+              leftTab === "code"
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <span className="flex items-center gap-2">
-              <TerminalIcon className="h-3.5 w-3.5" />
-              Console
-            </span>
-            {terminalOpen ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronUp className="h-3.5 w-3.5" />
+            Code
+          </button>
+          <button
+            type="button"
+            onClick={() => setLeftTab("console")}
+            className={`relative px-3 h-8 text-xs font-mono uppercase tracking-wider border-r border-border transition-colors flex items-center gap-1.5 ${
+              leftTab === "console"
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <TerminalIcon className="h-3 w-3" />
+            Console
+            {unseenConsole && leftTab !== "console" && (
+              <span
+                className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full"
+                style={{ background: "#ef4444" }}
+                aria-label="New output"
+              />
             )}
           </button>
-          {terminalOpen && (
-            <div
-              ref={terminalScrollRef}
-              className="flex-1 min-h-0 overflow-y-auto px-3 py-2"
-              style={{
-                fontFamily: '"Fira Code", "Courier New", ui-monospace, monospace',
-                fontSize: "12px",
-                lineHeight: 1.5,
-                color: "#D4D4D4",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
+        </div>
+
+        {/* ===== Tab body — same container, swap content ===== */}
+        <div className="flex-1 min-h-0 relative">
+          <div
+            className={`absolute inset-0 overflow-y-auto bg-[#1e1e2e] ${
+              leftTab === "code" ? "block" : "hidden"
+            }`}
+          >
+            <CodeMirror
+              value={code}
+              onChange={setCode}
+              theme="dark"
+              extensions={[languageExtension(language), activeLineField, lineTheme]}
+              basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
+              onCreateEditor={(view) => {
+                editorRef.current = view;
               }}
-            >
-              {consoleText ? (
-                <>
-                  {consoleText}
-                  <span className="inline-block w-2 h-3.5 align-text-bottom bg-gray-300 ml-0.5 animate-pulse" />
-                </>
-              ) : (
-                <span style={{ color: "#6A6A6A" }}>
-                  &gt; Program output will appear here…
-                </span>
-              )}
-            </div>
-          )}
+              height="100%"
+              className="h-full text-sm"
+            />
+          </div>
+          <div
+            ref={terminalScrollRef}
+            className={`absolute inset-0 overflow-y-auto px-3 py-2 ${
+              leftTab === "console" ? "block" : "hidden"
+            }`}
+            style={{
+              background: "#1E1E1E",
+              fontFamily: '"Fira Code", "Courier New", ui-monospace, monospace',
+              fontSize: "12px",
+              lineHeight: 1.5,
+              color: "#D4D4D4",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {consoleText ? (
+              <>
+                {consoleText}
+                <span className="inline-block w-2 h-3.5 align-text-bottom bg-gray-300 ml-0.5 animate-pulse" />
+              </>
+            ) : (
+              <span style={{ color: "#6A6A6A" }}>
+                &gt; Program output will appear here…
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
 
 
       {/* ===== Right column: Canvas + Controls ===== */}
