@@ -879,6 +879,21 @@ export function CodeVisualizer() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [consoleText]);
 
+  // Track unseen console output (only when user is on the Code tab)
+  useEffect(() => {
+    if (!consoleText) return;
+    if (leftTab === "console") {
+      setUnseenConsole(false);
+    } else {
+      setUnseenConsole(true);
+    }
+  }, [consoleText, leftTab]);
+
+  useEffect(() => {
+    if (leftTab === "console") setUnseenConsole(false);
+  }, [leftTab]);
+
+
 
 
 
