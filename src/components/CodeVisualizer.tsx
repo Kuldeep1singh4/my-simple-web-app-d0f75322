@@ -522,7 +522,7 @@ function LinkedListView({
 }
 
 
-// ---------- Binary Tree (strict level-balanced layout) ----------
+// ---------- Binary Tree (exact symmetrical coordinates) ----------
 type LayoutTreeNode = {
   x: number;
   y: number;
@@ -532,40 +532,38 @@ type LayoutTreeNode = {
 
 const TREE_NODE_R = 18;
 const TREE_LEVEL_H = 70;
-const TREE_LEAF_W = 56;
+const TREE_BASE_WIDTH = 320; // horizontal spread of the root's children
 
-function layoutTree(
+function treeDepth(node: JsonValue): number {
+  if (!isPlainObject(node)) return 0;
+  const l = treeDepth((node.left as JsonValue) ?? null);
+  const r = treeDepth((node.right as JsonValue) ?? null);
+  return 1 + Math.max(l, r);
+}
+
+function buildTreeLayout(
   node: JsonValue,
   depth: number,
-  cursor: { x: number },
+  x: number,
+  baseWidth: number,
 ): LayoutTreeNode | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-
-  const left = layoutTree((node.left as JsonValue) ?? null, depth + 1, cursor);
-  // y is purely a function of depth -> strict horizontal baselines per level
   const y = depth * TREE_LEVEL_H + TREE_NODE_R + 8;
-
-  let x: number;
+  // offset halves each depth — guarantees symmetrical diagonals at every level
+  const offset = baseWidth / Math.pow(2, depth + 1);
   const children: LayoutTreeNode[] = [];
+  const left = buildTreeLayout((node.left as JsonValue) ?? null, depth + 1, x - offset, baseWidth);
+  const right = buildTreeLayout(
+    (node.right as JsonValue) ?? null,
+    depth + 1,
+    x + offset,
+    baseWidth,
+  );
   if (left) children.push(left);
-
-  const right = layoutTree((node.right as JsonValue) ?? null, depth + 1, cursor);
   if (right) children.push(right);
-
-  if (left && right) {
-    x = (left.x + right.x) / 2;
-  } else if (left) {
-    x = left.x + TREE_LEAF_W / 2;
-  } else if (right) {
-    x = right.x - TREE_LEAF_W / 2;
-  } else {
-    x = cursor.x + TREE_LEAF_W / 2;
-    cursor.x += TREE_LEAF_W;
-  }
-
   return { x, y, label, children };
 }
 
@@ -576,11 +574,13 @@ function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const layout = layoutTree(node, 0, { x: 0 });
+  const d = treeDepth(node as JsonValue);
+  // scale base width with depth so deep trees still fit
+  const baseWidth = Math.max(TREE_BASE_WIDTH, Math.pow(2, d) * 36);
+  const layout = buildTreeLayout(node as JsonValue, 0, 0, baseWidth);
   if (!layout) return null;
   const all = flatten(layout);
   const minX = Math.min(...all.map((n) => n.x));
-  // normalize so leftmost node sits at padding
   const PAD = TREE_NODE_R + 8;
   const dx = PAD - minX;
   all.forEach((n) => (n.x += dx));
@@ -595,6 +595,7 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
     });
   };
   walk(layout);
+
 
   return (
     <svg width={width} height={height} style={{ display: "block" }} aria-hidden>
