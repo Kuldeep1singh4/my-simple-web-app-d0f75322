@@ -522,17 +522,18 @@ function LinkedListView({
 }
 
 
-// ---------- Binary Tree (percentage-based symmetrical layout) ----------
+// ---------- Binary Tree (pure-SVG Reingold-Tilford-style layout) ----------
 type LayoutTreeNode = {
-  xPct: number; // horizontal position in %
-  y: number; // vertical position in px
+  x: number;
+  y: number;
   depth: number;
   label: string;
   children: LayoutTreeNode[];
 };
 
-const TREE_NODE_SIZE = 36; // px diameter
-const TREE_LEVEL_H = 60; // px between levels
+const TREE_CANVAS_W = 1000; // virtual SVG units
+const TREE_LEVEL_GAP = 80; // virtual units between levels
+const TREE_NODE_R = 18; // node circle radius
 
 function treeDepth(node: JsonValue): number {
   if (!isPlainObject(node)) return 0;
@@ -544,22 +545,23 @@ function treeDepth(node: JsonValue): number {
 function buildTreeLayout(
   node: JsonValue,
   depth: number,
-  xPct: number,
+  x: number,
+  y: number,
 ): LayoutTreeNode | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-  const y = depth * TREE_LEVEL_H;
-  // offset = 25 / 2^(depth-1)  →  depth 1 = 25%, 2 = 12.5%, 3 = 6.25%
+  // child_x = parent_x ± (canvasWidth / 2^(depth + 2))
+  const offset = TREE_CANVAS_W / Math.pow(2, depth + 2);
+  const childY = y + TREE_LEVEL_GAP;
   const childDepth = depth + 1;
-  const offset = 25 / Math.pow(2, childDepth - 1);
+  const left = buildTreeLayout((node.left as JsonValue) ?? null, childDepth, x - offset, childY);
+  const right = buildTreeLayout((node.right as JsonValue) ?? null, childDepth, x + offset, childY);
   const children: LayoutTreeNode[] = [];
-  const left = buildTreeLayout((node.left as JsonValue) ?? null, childDepth, xPct - offset);
-  const right = buildTreeLayout((node.right as JsonValue) ?? null, childDepth, xPct + offset);
   if (left) children.push(left);
   if (right) children.push(right);
-  return { xPct, y, depth, label, children };
+  return { x, y, depth, label, children };
 }
 
 function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
@@ -569,62 +571,73 @@ function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const layout = buildTreeLayout(node as JsonValue, 0, 50);
+  const layout = buildTreeLayout(node as JsonValue, 0, TREE_CANVAS_W / 2, 0);
   if (!layout) return null;
   const all = flatten(layout);
-  const d = treeDepth(node as JsonValue);
-  const height = Math.max(1, d) * TREE_LEVEL_H + TREE_NODE_SIZE;
+  const depth = treeDepth(node as JsonValue);
 
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
   const walk = (n: LayoutTreeNode) => {
     n.children.forEach((c) => {
-      edges.push({ x1: n.xPct, y1: n.y, x2: c.xPct, y2: c.y });
+      edges.push({ x1: n.x, y1: n.y, x2: c.x, y2: c.y });
       walk(c);
     });
   };
   walk(layout);
 
+  // dynamic viewBox tightly fits the actual tree
+  const pad = TREE_NODE_R * 2;
+  const minX = Math.min(...all.map((n) => n.x)) - pad;
+  const maxX = Math.max(...all.map((n) => n.x)) + pad;
+  const vbW = Math.max(1, maxX - minX);
+  const vbH = Math.max(1, depth) * TREE_LEVEL_GAP + pad * 2 - TREE_LEVEL_GAP;
+  const minY = -pad;
+
   return (
-    <div
-      className="relative w-full"
-      style={{ height, overflowX: "hidden", overflowY: "visible" }}
+    <svg
+      width="100%"
+      height="100%"
+      viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ display: "block" }}
+      aria-hidden
     >
-      <svg
-        width="100%"
-        height={height}
-        className="absolute inset-0 pointer-events-none"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        {edges.map((e, i) => (
-          <line
-            key={i}
-            x1={`${e.x1}%`}
-            y1={e.y1 + TREE_NODE_SIZE / 2}
-            x2={`${e.x2}%`}
-            y2={e.y2 + TREE_NODE_SIZE / 2}
-            stroke="#333"
-            strokeWidth="1.25"
-          />
-        ))}
-      </svg>
-      {all.map((n, i) => (
-        <div
-          key={i}
-          className="absolute flex items-center justify-center rounded-full bg-white font-mono text-[12px] font-semibold text-[#111]"
-          style={{
-            left: `${n.xPct}%`,
-            top: n.y,
-            width: TREE_NODE_SIZE,
-            height: TREE_NODE_SIZE,
-            transform: "translateX(-50%)",
-            border: "1.25px solid #333",
-          }}
-        >
-          {n.label}
-        </div>
+      {edges.map((e, i) => (
+        <line
+          key={`e${i}`}
+          x1={e.x1}
+          y1={e.y1}
+          x2={e.x2}
+          y2={e.y2}
+          stroke="#333"
+          strokeWidth={1.5}
+        />
       ))}
-    </div>
+      {all.map((n, i) => (
+        <g key={`n${i}`}>
+          <circle
+            cx={n.x}
+            cy={n.y}
+            r={TREE_NODE_R}
+            fill="#ffffff"
+            stroke="#333"
+            strokeWidth={1.5}
+          />
+          <text
+            x={n.x}
+            y={n.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+            fontSize={13}
+            fontWeight={600}
+            fill="#111"
+          >
+            {n.label}
+          </text>
+        </g>
+      ))}
+    </svg>
   );
 }
 
@@ -1119,11 +1132,13 @@ export function CodeVisualizer() {
 
                 {/* Trees */}
                 {trees.map(([name, val]) => (
-                  <div key={name} className="flex flex-col items-center gap-1">
+                  <div key={name} className="flex flex-col items-center gap-1 flex-1 min-h-0 w-full">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
                       {name}
                     </div>
-                    <TreeView node={val as { [k: string]: JsonValue }} />
+                    <div className="flex-1 min-h-0 w-full" style={{ minHeight: 200 }}>
+                      <TreeView node={val as { [k: string]: JsonValue }} />
+                    </div>
                   </div>
                 ))}
 
