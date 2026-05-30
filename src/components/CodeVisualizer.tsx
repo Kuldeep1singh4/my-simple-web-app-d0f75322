@@ -522,17 +522,17 @@ function LinkedListView({
 }
 
 
-// ---------- Binary Tree (exact symmetrical coordinates) ----------
+// ---------- Binary Tree (percentage-based symmetrical layout) ----------
 type LayoutTreeNode = {
-  x: number;
-  y: number;
+  xPct: number; // horizontal position in %
+  y: number; // vertical position in px
+  depth: number;
   label: string;
   children: LayoutTreeNode[];
 };
 
-const TREE_NODE_R = 18;
-const TREE_LEVEL_H = 70;
-const TREE_BASE_WIDTH = 320; // horizontal spread of the root's children
+const TREE_NODE_SIZE = 36; // px diameter
+const TREE_LEVEL_H = 60; // px between levels
 
 function treeDepth(node: JsonValue): number {
   if (!isPlainObject(node)) return 0;
@@ -544,27 +544,22 @@ function treeDepth(node: JsonValue): number {
 function buildTreeLayout(
   node: JsonValue,
   depth: number,
-  x: number,
-  baseWidth: number,
+  xPct: number,
 ): LayoutTreeNode | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-  const y = depth * TREE_LEVEL_H + TREE_NODE_R + 8;
-  // offset halves each depth — guarantees symmetrical diagonals at every level
-  const offset = baseWidth / Math.pow(2, depth + 1);
+  const y = depth * TREE_LEVEL_H;
+  // offset = 25 / 2^(depth-1)  →  depth 1 = 25%, 2 = 12.5%, 3 = 6.25%
+  const childDepth = depth + 1;
+  const offset = 25 / Math.pow(2, childDepth - 1);
   const children: LayoutTreeNode[] = [];
-  const left = buildTreeLayout((node.left as JsonValue) ?? null, depth + 1, x - offset, baseWidth);
-  const right = buildTreeLayout(
-    (node.right as JsonValue) ?? null,
-    depth + 1,
-    x + offset,
-    baseWidth,
-  );
+  const left = buildTreeLayout((node.left as JsonValue) ?? null, childDepth, xPct - offset);
+  const right = buildTreeLayout((node.right as JsonValue) ?? null, childDepth, xPct + offset);
   if (left) children.push(left);
   if (right) children.push(right);
-  return { x, y, label, children };
+  return { xPct, y, depth, label, children };
 }
 
 function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
@@ -574,68 +569,65 @@ function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const d = treeDepth(node as JsonValue);
-  // scale base width with depth so deep trees still fit
-  const baseWidth = Math.max(TREE_BASE_WIDTH, Math.pow(2, d) * 36);
-  const layout = buildTreeLayout(node as JsonValue, 0, 0, baseWidth);
+  const layout = buildTreeLayout(node as JsonValue, 0, 50);
   if (!layout) return null;
   const all = flatten(layout);
-  const minX = Math.min(...all.map((n) => n.x));
-  const PAD = TREE_NODE_R + 8;
-  const dx = PAD - minX;
-  all.forEach((n) => (n.x += dx));
-  const width = Math.max(...all.map((n) => n.x)) + TREE_NODE_R + 8;
-  const height = Math.max(...all.map((n) => n.y)) + TREE_NODE_R + 8;
+  const d = treeDepth(node as JsonValue);
+  const height = Math.max(1, d) * TREE_LEVEL_H + TREE_NODE_SIZE;
 
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
   const walk = (n: LayoutTreeNode) => {
     n.children.forEach((c) => {
-      edges.push({ x1: n.x, y1: n.y, x2: c.x, y2: c.y });
+      edges.push({ x1: n.xPct, y1: n.y, x2: c.xPct, y2: c.y });
       walk(c);
     });
   };
   walk(layout);
 
-
   return (
-    <svg width={width} height={height} style={{ display: "block" }} aria-hidden>
-      {edges.map((e, i) => (
-        <line
-          key={i}
-          x1={e.x1}
-          y1={e.y1}
-          x2={e.x2}
-          y2={e.y2}
-          stroke="#333"
-          strokeWidth="1.25"
-        />
-      ))}
-      {all.map((n, i) => (
-        <g key={i}>
-          <circle
-            cx={n.x}
-            cy={n.y}
-            r={TREE_NODE_R}
-            fill="#FFFFFF"
+    <div
+      className="relative w-full"
+      style={{ height, overflowX: "hidden", overflowY: "visible" }}
+    >
+      <svg
+        width="100%"
+        height={height}
+        className="absolute inset-0 pointer-events-none"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        {edges.map((e, i) => (
+          <line
+            key={i}
+            x1={`${e.x1}%`}
+            y1={e.y1 + TREE_NODE_SIZE / 2}
+            x2={`${e.x2}%`}
+            y2={e.y2 + TREE_NODE_SIZE / 2}
             stroke="#333"
             strokeWidth="1.25"
           />
-          <text
-            x={n.x}
-            y={n.y + 4}
-            textAnchor="middle"
-            fontFamily="ui-monospace, monospace"
-            fontSize="12"
-            fontWeight="600"
-            fill="#111"
-          >
-            {n.label}
-          </text>
-        </g>
+        ))}
+      </svg>
+      {all.map((n, i) => (
+        <div
+          key={i}
+          className="absolute flex items-center justify-center rounded-full bg-white font-mono text-[12px] font-semibold text-[#111]"
+          style={{
+            left: `${n.xPct}%`,
+            top: n.y,
+            width: TREE_NODE_SIZE,
+            height: TREE_NODE_SIZE,
+            transform: "translateX(-50%)",
+            border: "1.25px solid #333",
+          }}
+        >
+          {n.label}
+        </div>
       ))}
-    </svg>
+    </div>
   );
 }
+
 
 // ---------- Memory Board (primitives view) ----------
 function MemoryBoard({
