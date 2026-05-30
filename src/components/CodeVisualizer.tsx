@@ -1020,7 +1020,7 @@ export function CodeVisualizer() {
 
       {/* ===== Right column: Canvas + Controls ===== */}
       <div className="flex flex-col w-full md:w-1/2 h-[65%] md:h-full min-h-0">
-        {/* Canvas: Mobile 50/(50+15)=~76.9% of right col; Desktop 85% */}
+        {/* Canvas: grows to fill freed vertical space */}
         <div
           ref={canvasRef}
           style={canvasStyle}
