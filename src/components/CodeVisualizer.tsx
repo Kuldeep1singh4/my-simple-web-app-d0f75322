@@ -1168,11 +1168,14 @@ export function CodeVisualizer() {
         </div>
 
 
-        {/* ===== Control Center (pinned, ~15% height) ===== */}
-        <div className="h-[15dvh] md:h-[15%] min-h-[64px] shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center">
-
+        {/* ===== Control Center (compressed, hugs bottom edge) ===== */}
+        <div
+          className="shrink-0 border-t border-border bg-card/80 backdrop-blur flex items-center justify-center px-2 pt-1"
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }}
+        >
           {/* Buttons */}
-          <div className="flex items-center justify-center gap-2 px-3">
+          <div className="flex items-center justify-center gap-2">
+
 
             <Button
               variant="outline"
