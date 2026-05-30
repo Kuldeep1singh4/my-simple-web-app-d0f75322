@@ -1132,11 +1132,13 @@ export function CodeVisualizer() {
 
                 {/* Trees */}
                 {trees.map(([name, val]) => (
-                  <div key={name} className="flex flex-col items-center gap-1">
+                  <div key={name} className="flex flex-col items-center gap-1 flex-1 min-h-0 w-full">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500 font-mono">
                       {name}
                     </div>
-                    <TreeView node={val as { [k: string]: JsonValue }} />
+                    <div className="flex-1 min-h-0 w-full" style={{ minHeight: 200 }}>
+                      <TreeView node={val as { [k: string]: JsonValue }} />
+                    </div>
                   </div>
                 ))}
 
