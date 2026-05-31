@@ -559,14 +559,14 @@ function TreeNodeView({
 }) {
   // Tighter gaps deeper in the tree; wider near the top.
   const remainingLevels = Math.max(1, maxDepth - depth);
-  const gapPx = Math.max(8, remainingLevels * 14);
+  const gapPx = Math.max(8, remainingLevels * 6);
   const hasChildren = node.left || node.right;
 
   return (
     <div className="flex flex-col items-center" style={{ flex: "0 0 auto" }}>
       <div
         ref={(el) => registerRef(path, el)}
-        className="w-12 h-12 rounded-full border-2 border-foreground bg-background flex items-center justify-center font-mono text-sm font-semibold shadow-sm"
+        className="w-9 h-9 rounded-full border-2 border-foreground bg-background flex items-center justify-center font-mono text-xs font-semibold shadow-sm"
         style={{ position: "relative", zIndex: 1 }}
       >
         {node.label}
@@ -574,7 +574,7 @@ function TreeNodeView({
       {hasChildren && (
         <div
           className="flex flex-row items-start justify-center"
-          style={{ marginTop: 32, gap: `${gapPx}px` }}
+          style={{ marginTop: 22, gap: `${gapPx}px` }}
         >
           {node.left ? (
             <TreeNodeView
@@ -585,7 +585,7 @@ function TreeNodeView({
               registerRef={registerRef}
             />
           ) : (
-            <div style={{ flex: "0 0 auto", width: 48 }} />
+            <div style={{ flex: "0 0 auto", width: 36 }} />
           )}
           {node.right ? (
             <TreeNodeView
@@ -596,7 +596,7 @@ function TreeNodeView({
               registerRef={registerRef}
             />
           ) : (
-            <div style={{ flex: "0 0 auto", width: 48 }} />
+            <div style={{ flex: "0 0 auto", width: 36 }} />
           )}
         </div>
       )}
