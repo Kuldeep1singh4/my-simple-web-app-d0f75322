@@ -522,122 +522,187 @@ function LinkedListView({
 }
 
 
-// ---------- Binary Tree (pure-SVG Reingold-Tilford-style layout) ----------
-type LayoutTreeNode = {
-  x: number;
-  y: number;
-  depth: number;
-  label: string;
-  children: LayoutTreeNode[];
-};
+// ---------- Binary Tree (recursive flexbox + SVG line overlay) ----------
+type TreeData = { label: string; left: TreeData | null; right: TreeData | null };
 
-const TREE_CANVAS_W = 1000; // virtual SVG units
-const TREE_LEVEL_GAP = 80; // virtual units between levels
-const TREE_NODE_R = 18; // node circle radius
-
-function treeDepth(node: JsonValue): number {
-  if (!isPlainObject(node)) return 0;
-  const l = treeDepth((node.left as JsonValue) ?? null);
-  const r = treeDepth((node.right as JsonValue) ?? null);
-  return 1 + Math.max(l, r);
-}
-
-function buildTreeLayout(
-  node: JsonValue,
-  depth: number,
-  x: number,
-  y: number,
-): LayoutTreeNode | null {
+function toTreeData(node: JsonValue): TreeData | null {
   if (!isPlainObject(node)) return null;
   const valueKey =
     "value" in node ? "value" : Object.keys(node).find((k) => k !== "left" && k !== "right");
   const label = valueKey ? formatPrimitive(node[valueKey] as JsonValue) : "•";
-  // child_x = parent_x ± (canvasWidth / 2^(depth + 2))
-  const offset = TREE_CANVAS_W / Math.pow(2, depth + 2);
-  const childY = y + TREE_LEVEL_GAP;
-  const childDepth = depth + 1;
-  const left = buildTreeLayout((node.left as JsonValue) ?? null, childDepth, x - offset, childY);
-  const right = buildTreeLayout((node.right as JsonValue) ?? null, childDepth, x + offset, childY);
-  const children: LayoutTreeNode[] = [];
-  if (left) children.push(left);
-  if (right) children.push(right);
-  return { x, y, depth, label, children };
+  return {
+    label,
+    left: toTreeData((node.left as JsonValue) ?? null),
+    right: toTreeData((node.right as JsonValue) ?? null),
+  };
 }
 
-function flatten(n: LayoutTreeNode, out: LayoutTreeNode[] = []) {
-  out.push(n);
-  n.children.forEach((c) => flatten(c, out));
+function treeMaxDepth(n: TreeData | null): number {
+  if (!n) return 0;
+  return 1 + Math.max(treeMaxDepth(n.left), treeMaxDepth(n.right));
+}
+
+type NodeRefMap = Map<string, HTMLDivElement | null>;
+
+function TreeNodeView({
+  node,
+  path,
+  depth,
+  maxDepth,
+  registerRef,
+}: {
+  node: TreeData;
+  path: string;
+  depth: number;
+  maxDepth: number;
+  registerRef: (path: string, el: HTMLDivElement | null) => void;
+}) {
+  // Tighter gaps deeper in the tree; wider near the top.
+  const remainingLevels = Math.max(1, maxDepth - depth);
+  const gapPx = Math.max(8, remainingLevels * 14);
+  const hasChildren = node.left || node.right;
+
+  return (
+    <div className="flex flex-col items-center" style={{ flex: "0 0 auto" }}>
+      <div
+        ref={(el) => registerRef(path, el)}
+        className="w-12 h-12 rounded-full border-2 border-foreground bg-background flex items-center justify-center font-mono text-sm font-semibold shadow-sm"
+        style={{ position: "relative", zIndex: 1 }}
+      >
+        {node.label}
+      </div>
+      {hasChildren && (
+        <div
+          className="flex flex-row items-start justify-center"
+          style={{ marginTop: 32, gap: `${gapPx}px` }}
+        >
+          {node.left ? (
+            <TreeNodeView
+              node={node.left}
+              path={path + "L"}
+              depth={depth + 1}
+              maxDepth={maxDepth}
+              registerRef={registerRef}
+            />
+          ) : (
+            <div style={{ flex: "0 0 auto", width: 48 }} />
+          )}
+          {node.right ? (
+            <TreeNodeView
+              node={node.right}
+              path={path + "R"}
+              depth={depth + 1}
+              maxDepth={maxDepth}
+              registerRef={registerRef}
+            />
+          ) : (
+            <div style={{ flex: "0 0 auto", width: 48 }} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function collectEdges(node: TreeData, path: string, out: { from: string; to: string }[] = []) {
+  if (node.left) {
+    out.push({ from: path, to: path + "L" });
+    collectEdges(node.left, path + "L", out);
+  }
+  if (node.right) {
+    out.push({ from: path, to: path + "R" });
+    collectEdges(node.right, path + "R", out);
+  }
   return out;
 }
 
 function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
-  const layout = buildTreeLayout(node as JsonValue, 0, TREE_CANVAS_W / 2, 0);
-  if (!layout) return null;
-  const all = flatten(layout);
-  const depth = treeDepth(node as JsonValue);
+  const data = toTreeData(node as JsonValue);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const nodeRefs = useRef<NodeRefMap>(new Map());
+  const [lines, setLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  const walk = (n: LayoutTreeNode) => {
-    n.children.forEach((c) => {
-      edges.push({ x1: n.x, y1: n.y, x2: c.x, y2: c.y });
-      walk(c);
-    });
+  const registerRef = (path: string, el: HTMLDivElement | null) => {
+    if (el) nodeRefs.current.set(path, el);
+    else nodeRefs.current.delete(path);
   };
-  walk(layout);
 
-  // dynamic viewBox tightly fits the actual tree
-  const pad = TREE_NODE_R * 2;
-  const minX = Math.min(...all.map((n) => n.x)) - pad;
-  const maxX = Math.max(...all.map((n) => n.x)) + pad;
-  const vbW = Math.max(1, maxX - minX);
-  const vbH = Math.max(1, depth) * TREE_LEVEL_GAP + pad * 2 - TREE_LEVEL_GAP;
-  const minY = -pad;
+  useEffect(() => {
+    if (!data || !innerRef.current) return;
+    const measure = () => {
+      const inner = innerRef.current;
+      if (!inner) return;
+      const baseRect = inner.getBoundingClientRect();
+      const edges = collectEdges(data, "");
+      const next: { x1: number; y1: number; x2: number; y2: number }[] = [];
+      edges.forEach(({ from, to }) => {
+        const a = nodeRefs.current.get(from);
+        const b = nodeRefs.current.get(to);
+        if (!a || !b) return;
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        next.push({
+          x1: ar.left - baseRect.left + ar.width / 2,
+          y1: ar.top - baseRect.top + ar.height / 2,
+          x2: br.left - baseRect.left + br.width / 2,
+          y2: br.top - baseRect.top + br.height / 2,
+        });
+      });
+      setLines(next);
+      setSize({ w: inner.scrollWidth, h: inner.scrollHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(innerRef.current);
+    nodeRefs.current.forEach((el) => el && ro.observe(el));
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [data]);
+
+  if (!data) return null;
+  const maxDepth = treeMaxDepth(data);
 
   return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox={`${minX} ${minY} ${vbW} ${vbH}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ display: "block" }}
-      aria-hidden
+    <div
+      ref={containerRef}
+      className="w-full h-full flex items-start justify-center"
+      style={{ overflow: "auto", padding: 16 }}
     >
-      {edges.map((e, i) => (
-        <line
-          key={`e${i}`}
-          x1={e.x1}
-          y1={e.y1}
-          x2={e.x2}
-          y2={e.y2}
-          stroke="#333"
-          strokeWidth={1.5}
+      <div ref={innerRef} style={{ position: "relative", display: "inline-block" }}>
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={size.w || "100%"}
+          height={size.h || "100%"}
+          style={{ zIndex: 0, overflow: "visible" }}
+          aria-hidden
+        >
+          {lines.map((l, i) => (
+            <line
+              key={i}
+              x1={l.x1}
+              y1={l.y1}
+              x2={l.x2}
+              y2={l.y2}
+              stroke="currentColor"
+              strokeWidth={1.5}
+              opacity={0.7}
+            />
+          ))}
+        </svg>
+        <TreeNodeView
+          node={data}
+          path=""
+          depth={0}
+          maxDepth={maxDepth}
+          registerRef={registerRef}
         />
-      ))}
-      {all.map((n, i) => (
-        <g key={`n${i}`}>
-          <circle
-            cx={n.x}
-            cy={n.y}
-            r={TREE_NODE_R}
-            fill="#ffffff"
-            stroke="#333"
-            strokeWidth={1.5}
-          />
-          <text
-            x={n.x}
-            y={n.y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-            fontSize={13}
-            fontWeight={600}
-            fill="#111"
-          >
-            {n.label}
-          </text>
-        </g>
-      ))}
-    </svg>
+      </div>
+    </div>
   );
 }
 
