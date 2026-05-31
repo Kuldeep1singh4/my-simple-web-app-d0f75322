@@ -623,6 +623,7 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
   const nodeRefs = useRef<NodeRefMap>(new Map());
   const [lines, setLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [scale, setScale] = useState(1);
 
   const registerRef = (path: string, el: HTMLDivElement | null) => {
     if (el) nodeRefs.current.set(path, el);
@@ -630,13 +631,24 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
   };
 
   useEffect(() => {
-    if (!data || !innerRef.current) return;
+    if (!data || !innerRef.current || !containerRef.current) return;
     const measure = () => {
       const inner = innerRef.current;
-      if (!inner) return;
+      const container = containerRef.current;
+      if (!inner || !container) return;
+
+      const treeWidth = inner.scrollWidth;
+      const treeHeight = inner.scrollHeight;
+      const containerWidth = container.clientWidth;
+      const nextScale =
+        treeWidth > 0 ? Math.min(1, Math.max(0.2, (containerWidth - 40) / treeWidth)) : 1;
+      setScale(nextScale);
+      setSize({ w: treeWidth, h: treeHeight });
+
       const baseRect = inner.getBoundingClientRect();
       const edges = collectEdges(data, "");
       const next: { x1: number; y1: number; x2: number; y2: number }[] = [];
+      const s = nextScale || 1;
       edges.forEach(({ from, to }) => {
         const a = nodeRefs.current.get(from);
         const b = nodeRefs.current.get(to);
@@ -644,18 +656,18 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
         const ar = a.getBoundingClientRect();
         const br = b.getBoundingClientRect();
         next.push({
-          x1: ar.left - baseRect.left + ar.width / 2,
-          y1: ar.top - baseRect.top + ar.height / 2,
-          x2: br.left - baseRect.left + br.width / 2,
-          y2: br.top - baseRect.top + br.height / 2,
+          x1: (ar.left - baseRect.left + ar.width / 2) / s,
+          y1: (ar.top - baseRect.top + ar.height / 2) / s,
+          x2: (br.left - baseRect.left + br.width / 2) / s,
+          y2: (br.top - baseRect.top + br.height / 2) / s,
         });
       });
       setLines(next);
-      setSize({ w: inner.scrollWidth, h: inner.scrollHeight });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(innerRef.current);
+    ro.observe(containerRef.current);
     nodeRefs.current.forEach((el) => el && ro.observe(el));
     window.addEventListener("resize", measure);
     return () => {
@@ -670,10 +682,18 @@ function TreeView({ node }: { node: { [k: string]: JsonValue } }) {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full flex items-start justify-center"
-      style={{ overflow: "auto", padding: 16 }}
+      className="w-full h-full flex justify-center overflow-hidden"
+      style={{ padding: 16 }}
     >
-      <div ref={innerRef} style={{ position: "relative", display: "inline-block" }}>
+      <div
+        ref={innerRef}
+        className="inline-flex flex-col items-center relative origin-top"
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: "top center",
+          transition: "transform 0.3s ease",
+        }}
+      >
         <svg
           className="absolute inset-0 pointer-events-none"
           width={size.w || "100%"}
