@@ -212,17 +212,22 @@ function parseActive(list: string[] | undefined): ActiveSet {
 
 type PointerInfo = { var: string; index: number; color: string };
 
+// Stronger spring just for swap/glide animations between array indices
+const SWAP_SPRING = { type: "spring" as const, stiffness: 300, damping: 30 };
+
 // ---------- Animated array row with pointers underneath ----------
 function ArrayRow({
   name,
   value,
   active,
   pointers,
+  bounds,
 }: {
   name: string;
   value: JsonValue[];
   active: ActiveSet;
   pointers: PointerInfo[];
+  bounds?: { low: number; high: number } | null;
 }) {
   const activeIdx = active.indices.get(name) ?? new Set<number>();
   const nameActive = active.names.has(name) && activeIdx.size === 0;
@@ -237,15 +242,22 @@ function ArrayRow({
           <motion.div layout className="flex gap-1.5" style={{ overflow: "visible" }}>
             {value.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
+              const inBounds = !bounds || (i >= bounds.low && i <= bounds.high);
+              // Stable key so Framer can animate physical swaps
+              const stableKey =
+                typeof item === "number" || typeof item === "string"
+                  ? `v-${item}`
+                  : `i-${i}`;
               return (
                 <motion.div
-                  key={`${name}-${typeof item === "number" || typeof item === "string" ? item : i}-${i}`}
+                  key={`${name}-${stableKey}`}
                   layout
                   data-active-key={`${name}[${i}]`}
-                  transition={SPRING}
+                  transition={SWAP_SPRING}
                   animate={{
                     backgroundColor: isActive ? "var(--cell-active-bg)" : COLORS.default.bg,
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
+                    opacity: inBounds ? 1 : 0.4,
                   }}
                   className="relative flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
                   style={{
@@ -267,36 +279,40 @@ function ArrayRow({
             })}
           </motion.div>
 
-          {/* Pointer track */}
+          {/* Pointer track — flex column stacks colliding pointers neatly */}
           <LayoutGroup id={`ptrs-${name}`}>
             <div
               className="absolute left-0 right-0 pointer-events-none"
-              style={{ top: "100%", marginTop: "20px", height: "32px", overflow: "visible" }}
+              style={{ top: "100%", marginTop: "20px", overflow: "visible" }}
             >
-              <div className="relative flex gap-1.5">
-                {value.map((_, i) => (
-                  <div key={i} className="min-w-12 px-2 relative">
-                    <AnimatePresence>
-                      {pointers
-                        .filter((p) => p.index === i)
-                        .map((p, k) => (
+              <div className="relative flex gap-1.5 items-start">
+                {value.map((_, i) => {
+                  const here = pointers.filter((p) => p.index === i);
+                  return (
+                    <div
+                      key={i}
+                      className="min-w-12 px-2 flex flex-col items-center"
+                    >
+                      <AnimatePresence>
+                        {here.map((p) => (
                           <motion.div
                             key={p.var}
                             layoutId={`ptr-${name}-${p.var}`}
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.8 }}
-                            transition={SPRING}
-                            style={{ top: k * 18, color: p.color }}
-                            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center font-mono font-bold"
+                            transition={SWAP_SPRING}
+                            style={{ color: p.color }}
+                            className="flex flex-col items-center font-mono font-bold leading-none"
                           >
                             <span className="text-lg leading-none">↑</span>
                             <span className="text-[10px]">{p.var}</span>
                           </motion.div>
                         ))}
-                    </AnimatePresence>
-                  </div>
-                ))}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </LayoutGroup>
