@@ -40,7 +40,7 @@ export type Complexity = {
   space: string;
 };
 
-export type StructureType = "array" | "linked_list" | "binary_tree" | "primitives";
+export type StructureType = "array" | "linked_list" | "binary_tree" | "graph" | "primitives";
 
 export type TraceResult = {
   steps: TraceStep[];
