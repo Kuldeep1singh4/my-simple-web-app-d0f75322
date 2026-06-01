@@ -1261,6 +1261,7 @@ export function CodeVisualizer() {
                         value={val}
                         active={active}
                         pointers={pointersByArray.get(name) ?? []}
+                        bounds={boundsByArray.get(name) ?? null}
                       />
                     ))}
                   </div>
