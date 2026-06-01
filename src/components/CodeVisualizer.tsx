@@ -1529,6 +1529,38 @@ export function CodeVisualizer() {
                 active={active}
                 actionColor={actionColor}
               />
+            ) : structureType === "graph" ? (
+              (() => {
+                const g = parseGraph(variables);
+                if (!g) {
+                  return (
+                    <div className="text-center text-gray-500 text-sm">
+                      Waiting for graph data…
+                    </div>
+                  );
+                }
+                const an = variables["activeNode"];
+                const vn = variables["visitedNodes"];
+                const activeNode =
+                  typeof an === "string" || typeof an === "number" ? String(an) : null;
+                const visited = new Set<string>(
+                  Array.isArray(vn)
+                    ? vn
+                        .filter((x) => typeof x === "string" || typeof x === "number")
+                        .map((x) => String(x))
+                    : [],
+                );
+                return (
+                  <div className="w-full flex-1 min-h-0" style={{ minHeight: 280 }}>
+                    <GraphVisualizer
+                      nodes={g.nodes}
+                      edges={g.edges}
+                      activeNode={activeNode}
+                      visitedNodes={visited}
+                    />
+                  </div>
+                );
+              })()
             ) : (
               <>
                 {/* Holding cells */}
