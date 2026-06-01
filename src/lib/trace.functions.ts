@@ -138,7 +138,7 @@ export const traceCode = createServerFn({ method: "POST" })
         parsed.complexity && typeof parsed.complexity.time === "string" && typeof parsed.complexity.space === "string"
           ? parsed.complexity
           : null;
-      const allowed: StructureType[] = ["array", "linked_list", "binary_tree", "primitives"];
+      const allowed: StructureType[] = ["array", "linked_list", "binary_tree", "graph", "primitives"];
       const structureType =
         typeof parsed.structureType === "string" && (allowed as string[]).includes(parsed.structureType)
           ? (parsed.structureType as StructureType)
