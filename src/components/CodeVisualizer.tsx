@@ -964,6 +964,41 @@ export function CodeVisualizer() {
     return map;
   }, [arrays, pointerScalarNames, variables]);
 
+  // Bounds detection: low/high, left/right, start/end pairs that scope a sub-array
+  const boundsByArray = useMemo(() => {
+    const pairs: Array<[string, string]> = [
+      ["low", "high"],
+      ["left", "right"],
+      ["start", "end"],
+      ["lo", "hi"],
+      ["l", "r"],
+    ];
+    const map = new Map<string, { low: number; high: number }>();
+    let detected: { low: number; high: number } | null = null;
+    for (const [a, b] of pairs) {
+      const av = variables[a];
+      const bv = variables[b];
+      if (
+        typeof av === "number" &&
+        typeof bv === "number" &&
+        Number.isInteger(av) &&
+        Number.isInteger(bv) &&
+        av <= bv
+      ) {
+        detected = { low: av, high: bv };
+        break;
+      }
+    }
+    if (detected) {
+      for (const [aName, aVal] of arrays) {
+        if (detected.low >= 0 && detected.high < aVal.length) {
+          map.set(aName, detected);
+        }
+      }
+    }
+    return map;
+  }, [arrays, variables]);
+
   // Scalars that are NOT pointers -> render as holding cells (if primitive) or scalar cards (if complex)
   const nonPointerScalars = scalars.filter(([n]) => !pointerScalarNames.includes(n));
   const holdingCells = nonPointerScalars
