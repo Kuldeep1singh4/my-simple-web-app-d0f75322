@@ -811,8 +811,14 @@ type GraphNode = { id: string; val?: JsonValue };
 type GraphEdge = { source: string; target: string; weight?: JsonValue };
 
 function parseGraph(vars: { [k: string]: JsonValue }): { nodes: GraphNode[]; edges: GraphEdge[] } | null {
-  const rawNodes = vars["nodes"];
-  const rawEdges = vars["edges"];
+  // Allow either top-level nodes/edges OR a nested graphData object
+  let rawNodes = vars["nodes"];
+  let rawEdges = vars["edges"];
+  const gd = vars["graphData"];
+  if ((!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) && isPlainObject(gd)) {
+    if (Array.isArray(gd.nodes)) rawNodes = gd.nodes;
+    if (Array.isArray(gd.edges)) rawEdges = gd.edges;
+  }
   if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) return null;
   const nodes: GraphNode[] = [];
   for (const n of rawNodes) {
