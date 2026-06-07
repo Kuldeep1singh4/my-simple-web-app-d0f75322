@@ -215,16 +215,21 @@ type PointerInfo = { var: string; index: number; color: string };
 // Stronger spring just for swap/glide animations between array indices
 const SWAP_SPRING = { type: "spring" as const, stiffness: 300, damping: 30 };
 
+// Identity-tagged item used by ArrayRow (id is a stable UUID that follows
+// the value across steps so Framer Motion can animate physical movement
+// instead of re-mounting "ghost" boxes).
+export type ArrayItem = { id: string; value: JsonValue };
+
 // ---------- Animated array row with pointers underneath ----------
 function ArrayRow({
   name,
-  value,
+  items,
   active,
   pointers,
   bounds,
 }: {
   name: string;
-  value: JsonValue[];
+  items: ArrayItem[];
   active: ActiveSet;
   pointers: PointerInfo[];
   bounds?: { low: number; high: number } | null;
@@ -233,24 +238,27 @@ function ArrayRow({
   const nameActive = active.names.has(name) && activeIdx.size === 0;
 
   return (
-    <div className="space-y-1" style={{ overflow: "visible" }}>
+    <div className="space-y-1 w-full" style={{ overflow: "visible" }}>
       <div className="text-xs uppercase tracking-wider font-mono" style={{ color: "#333" }}>
         {name}
       </div>
-      <div className="relative" style={{ overflow: "visible", paddingBottom: "3rem" }}>
+      <div
+        className="relative w-full overflow-x-auto touch-pan-x no-scrollbar"
+        style={{
+          paddingBottom: "3rem",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         <LayoutGroup id={`arr-${name}`}>
-          <motion.div layout className="flex gap-1.5" style={{ overflow: "visible" }}>
-            {value.map((item, i) => {
+          <motion.div layout className="inline-flex gap-1.5" style={{ overflow: "visible" }}>
+            {items.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
-              const inBounds = !bounds || (i >= bounds.low && i <= bounds.high);
-              // Stable key so Framer can animate physical swaps
-              const stableKey =
-                typeof item === "number" || typeof item === "string"
-                  ? `v-${item}`
-                  : `i-${i}`;
+              // Strict bounds dimming: outside [low, high] => dim
+              const inBounds =
+                !bounds || !(i < bounds.low || i > bounds.high);
               return (
                 <motion.div
-                  key={`${name}-${stableKey}`}
+                  key={item.id}
                   layout
                   data-active-key={`${name}[${i}]`}
                   transition={SWAP_SPRING}
@@ -259,7 +267,7 @@ function ArrayRow({
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
                     opacity: inBounds ? 1 : 0.4,
                   }}
-                  className="relative flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+                  className="relative flex-shrink-0 flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
                   style={{
                     backgroundColor: COLORS.default.bg,
                     border: "1px solid #333",
@@ -267,7 +275,7 @@ function ArrayRow({
                     boxShadow: "none",
                   }}
                 >
-                  <span>{formatPrimitive(item)}</span>
+                  <span>{formatPrimitive(item.value)}</span>
                   <span
                     className="absolute text-[10px] font-mono"
                     style={{ bottom: "-18px", color: "#555" }}
@@ -282,16 +290,16 @@ function ArrayRow({
           {/* Pointer track — flex column stacks colliding pointers neatly */}
           <LayoutGroup id={`ptrs-${name}`}>
             <div
-              className="absolute left-0 right-0 pointer-events-none"
+              className="absolute left-0 pointer-events-none"
               style={{ top: "100%", marginTop: "20px", overflow: "visible" }}
             >
-              <div className="relative flex gap-1.5 items-start">
-                {value.map((_, i) => {
+              <div className="relative inline-flex gap-1.5 items-start">
+                {items.map((it, i) => {
                   const here = pointers.filter((p) => p.index === i);
                   return (
                     <div
-                      key={i}
-                      className="min-w-12 px-2 flex flex-col items-center"
+                      key={it.id}
+                      className="min-w-12 flex-shrink-0 px-2 flex flex-col items-center"
                     >
                       <AnimatePresence>
                         {here.map((p) => (
@@ -803,8 +811,14 @@ type GraphNode = { id: string; val?: JsonValue };
 type GraphEdge = { source: string; target: string; weight?: JsonValue };
 
 function parseGraph(vars: { [k: string]: JsonValue }): { nodes: GraphNode[]; edges: GraphEdge[] } | null {
-  const rawNodes = vars["nodes"];
-  const rawEdges = vars["edges"];
+  // Allow either top-level nodes/edges OR a nested graphData object
+  let rawNodes = vars["nodes"];
+  let rawEdges = vars["edges"];
+  const gd = vars["graphData"];
+  if ((!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) && isPlainObject(gd)) {
+    if (Array.isArray(gd.nodes)) rawNodes = gd.nodes;
+    if (Array.isArray(gd.edges)) rawEdges = gd.edges;
+  }
   if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) return null;
   const nodes: GraphNode[] = [];
   for (const n of rawNodes) {
@@ -1175,7 +1189,12 @@ export function CodeVisualizer() {
   const forceList = structureType === "linked_list";
   const forceTree = structureType === "binary_tree";
   const forceArray = structureType === "array";
-  const arrays = entries.filter(([, v]) => Array.isArray(v)) as [string, JsonValue[]][];
+  const isGraph = structureType === "graph";
+  // Exclude graph-only keys so they don't render as standalone arrays beneath the graph
+  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData"]);
+  const arrays = entries.filter(
+    ([n, v]) => Array.isArray(v) && !(isGraph && GRAPH_KEYS.has(n)),
+  ) as [string, JsonValue[]][];
   const trees = forceList
     ? []
     : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
@@ -1286,6 +1305,63 @@ export function CodeVisualizer() {
     }
     return map;
   }, [arrays, variables]);
+
+  // ----- Stable identity tracking for array elements -----
+  // Each value gets a persistent UUID that follows it across steps so
+  // Framer Motion can animate physical swaps/shifts instead of re-mounting.
+  const arrayIdsRef = useRef<Map<string, ArrayItem[]>>(new Map());
+  // Reset identities whenever a fresh trace begins.
+  useEffect(() => {
+    arrayIdsRef.current = new Map();
+  }, [steps]);
+
+  const arrayItemsByName = useMemo(() => {
+    const result = new Map<string, ArrayItem[]>();
+    const prevAll = arrayIdsRef.current;
+    for (const [name, values] of arrays) {
+      const prev = prevAll.get(name) ?? [];
+      const usedPrev = new Set<number>();
+      const next: ArrayItem[] = new Array(values.length);
+      const valKey = (v: JsonValue) => JSON.stringify(v);
+      // Pass 1: same-index same-value preference (no movement)
+      for (let i = 0; i < values.length; i++) {
+        if (prev[i] && valKey(prev[i].value) === valKey(values[i])) {
+          usedPrev.add(i);
+          next[i] = { id: prev[i].id, value: values[i] };
+        }
+      }
+      // Pass 2: match remaining slots to any unused previous item with same value
+      for (let i = 0; i < values.length; i++) {
+        if (next[i]) continue;
+        const v = values[i];
+        let found = -1;
+        for (let j = 0; j < prev.length; j++) {
+          if (usedPrev.has(j)) continue;
+          if (valKey(prev[j].value) === valKey(v)) {
+            found = j;
+            break;
+          }
+        }
+        if (found >= 0) {
+          usedPrev.add(found);
+          next[i] = { id: prev[found].id, value: v };
+        }
+      }
+      // Pass 3: mint fresh UUIDs for anything left
+      for (let i = 0; i < values.length; i++) {
+        if (next[i]) continue;
+        const id =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `id-${name}-${i}-${Math.random().toString(36).slice(2)}`;
+        next[i] = { id, value: values[i] };
+      }
+      result.set(name, next);
+    }
+    arrayIdsRef.current = result;
+    return result;
+  }, [arrays]);
+
 
   // Scalars that are NOT pointers -> render as holding cells (if primitive) or scalar cards (if complex)
   const nonPointerScalars = scalars.filter(([n]) => !pointerScalarNames.includes(n));
@@ -1539,8 +1615,11 @@ export function CodeVisualizer() {
                     </div>
                   );
                 }
-                const an = variables["activeNode"];
-                const vn = variables["visitedNodes"];
+                const gdObj = isPlainObject(variables["graphData"])
+                  ? (variables["graphData"] as { [k: string]: JsonValue })
+                  : null;
+                const an = variables["activeNode"] ?? (gdObj ? gdObj["activeNode"] : undefined);
+                const vn = variables["visitedNodes"] ?? (gdObj ? gdObj["visitedNodes"] : undefined);
                 const activeNode =
                   typeof an === "string" || typeof an === "number" ? String(an) : null;
                 const visited = new Set<string>(
@@ -1571,14 +1650,14 @@ export function CodeVisualizer() {
                 {/* Arrays */}
                 {arrays.length > 0 && (
                   <div
-                    className="flex flex-col items-center gap-6"
+                    className="flex flex-col items-center gap-6 w-full"
                     style={{ maxWidth: "min(100%, 90vw)" }}
                   >
-                    {arrays.map(([name, val]) => (
+                    {arrays.map(([name]) => (
                       <ArrayRow
                         key={name}
                         name={name}
-                        value={val}
+                        items={arrayItemsByName.get(name) ?? []}
                         active={active}
                         pointers={pointersByArray.get(name) ?? []}
                         bounds={boundsByArray.get(name) ?? null}
