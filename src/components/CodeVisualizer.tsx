@@ -215,16 +215,21 @@ type PointerInfo = { var: string; index: number; color: string };
 // Stronger spring just for swap/glide animations between array indices
 const SWAP_SPRING = { type: "spring" as const, stiffness: 300, damping: 30 };
 
+// Identity-tagged item used by ArrayRow (id is a stable UUID that follows
+// the value across steps so Framer Motion can animate physical movement
+// instead of re-mounting "ghost" boxes).
+export type ArrayItem = { id: string; value: JsonValue };
+
 // ---------- Animated array row with pointers underneath ----------
 function ArrayRow({
   name,
-  value,
+  items,
   active,
   pointers,
   bounds,
 }: {
   name: string;
-  value: JsonValue[];
+  items: ArrayItem[];
   active: ActiveSet;
   pointers: PointerInfo[];
   bounds?: { low: number; high: number } | null;
@@ -233,24 +238,27 @@ function ArrayRow({
   const nameActive = active.names.has(name) && activeIdx.size === 0;
 
   return (
-    <div className="space-y-1" style={{ overflow: "visible" }}>
+    <div className="space-y-1 w-full" style={{ overflow: "visible" }}>
       <div className="text-xs uppercase tracking-wider font-mono" style={{ color: "#333" }}>
         {name}
       </div>
-      <div className="relative" style={{ overflow: "visible", paddingBottom: "3rem" }}>
+      <div
+        className="relative w-full overflow-x-auto touch-pan-x no-scrollbar"
+        style={{
+          paddingBottom: "3rem",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         <LayoutGroup id={`arr-${name}`}>
-          <motion.div layout className="flex gap-1.5" style={{ overflow: "visible" }}>
-            {value.map((item, i) => {
+          <motion.div layout className="inline-flex gap-1.5" style={{ overflow: "visible" }}>
+            {items.map((item, i) => {
               const isActive = activeIdx.has(i) || nameActive;
-              const inBounds = !bounds || (i >= bounds.low && i <= bounds.high);
-              // Stable key so Framer can animate physical swaps
-              const stableKey =
-                typeof item === "number" || typeof item === "string"
-                  ? `v-${item}`
-                  : `i-${i}`;
+              // Strict bounds dimming: outside [low, high] => dim
+              const inBounds =
+                !bounds || !(i < bounds.low || i > bounds.high);
               return (
                 <motion.div
-                  key={`${name}-${stableKey}`}
+                  key={item.id}
                   layout
                   data-active-key={`${name}[${i}]`}
                   transition={SWAP_SPRING}
@@ -259,7 +267,7 @@ function ArrayRow({
                     color: isActive ? "var(--cell-active-fg)" : COLORS.default.fg,
                     opacity: inBounds ? 1 : 0.4,
                   }}
-                  className="relative flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
+                  className="relative flex-shrink-0 flex flex-col items-center justify-center font-mono font-semibold text-sm min-w-12 h-12 px-2"
                   style={{
                     backgroundColor: COLORS.default.bg,
                     border: "1px solid #333",
@@ -267,7 +275,7 @@ function ArrayRow({
                     boxShadow: "none",
                   }}
                 >
-                  <span>{formatPrimitive(item)}</span>
+                  <span>{formatPrimitive(item.value)}</span>
                   <span
                     className="absolute text-[10px] font-mono"
                     style={{ bottom: "-18px", color: "#555" }}
@@ -282,16 +290,16 @@ function ArrayRow({
           {/* Pointer track — flex column stacks colliding pointers neatly */}
           <LayoutGroup id={`ptrs-${name}`}>
             <div
-              className="absolute left-0 right-0 pointer-events-none"
+              className="absolute left-0 pointer-events-none"
               style={{ top: "100%", marginTop: "20px", overflow: "visible" }}
             >
-              <div className="relative flex gap-1.5 items-start">
-                {value.map((_, i) => {
+              <div className="relative inline-flex gap-1.5 items-start">
+                {items.map((it, i) => {
                   const here = pointers.filter((p) => p.index === i);
                   return (
                     <div
-                      key={i}
-                      className="min-w-12 px-2 flex flex-col items-center"
+                      key={it.id}
+                      className="min-w-12 flex-shrink-0 px-2 flex flex-col items-center"
                     >
                       <AnimatePresence>
                         {here.map((p) => (
