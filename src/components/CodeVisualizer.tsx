@@ -1183,7 +1183,12 @@ export function CodeVisualizer() {
   const forceList = structureType === "linked_list";
   const forceTree = structureType === "binary_tree";
   const forceArray = structureType === "array";
-  const arrays = entries.filter(([, v]) => Array.isArray(v)) as [string, JsonValue[]][];
+  const isGraph = structureType === "graph";
+  // Exclude graph-only keys so they don't render as standalone arrays beneath the graph
+  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData"]);
+  const arrays = entries.filter(
+    ([n, v]) => Array.isArray(v) && !(isGraph && GRAPH_KEYS.has(n)),
+  ) as [string, JsonValue[]][];
   const trees = forceList
     ? []
     : entries.filter(([, v]) => (forceTree ? isPlainObject(v) && !isLinkedNode(v) : isTreeNode(v)));
