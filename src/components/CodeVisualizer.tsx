@@ -1615,8 +1615,11 @@ export function CodeVisualizer() {
                     </div>
                   );
                 }
-                const an = variables["activeNode"];
-                const vn = variables["visitedNodes"];
+                const gdObj = isPlainObject(variables["graphData"])
+                  ? (variables["graphData"] as { [k: string]: JsonValue })
+                  : null;
+                const an = variables["activeNode"] ?? (gdObj ? gdObj["activeNode"] : undefined);
+                const vn = variables["visitedNodes"] ?? (gdObj ? gdObj["visitedNodes"] : undefined);
                 const activeNode =
                   typeof an === "string" || typeof an === "number" ? String(an) : null;
                 const visited = new Set<string>(
