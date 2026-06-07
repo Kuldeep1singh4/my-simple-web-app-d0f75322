@@ -1641,14 +1641,14 @@ export function CodeVisualizer() {
                 {/* Arrays */}
                 {arrays.length > 0 && (
                   <div
-                    className="flex flex-col items-center gap-6"
+                    className="flex flex-col items-center gap-6 w-full"
                     style={{ maxWidth: "min(100%, 90vw)" }}
                   >
-                    {arrays.map(([name, val]) => (
+                    {arrays.map(([name]) => (
                       <ArrayRow
                         key={name}
                         name={name}
-                        value={val}
+                        items={arrayItemsByName.get(name) ?? []}
                         active={active}
                         pointers={pointersByArray.get(name) ?? []}
                         bounds={boundsByArray.get(name) ?? null}
