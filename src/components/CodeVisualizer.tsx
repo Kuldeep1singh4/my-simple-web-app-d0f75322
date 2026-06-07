@@ -1300,6 +1300,63 @@ export function CodeVisualizer() {
     return map;
   }, [arrays, variables]);
 
+  // ----- Stable identity tracking for array elements -----
+  // Each value gets a persistent UUID that follows it across steps so
+  // Framer Motion can animate physical swaps/shifts instead of re-mounting.
+  const arrayIdsRef = useRef<Map<string, ArrayItem[]>>(new Map());
+  // Reset identities whenever a fresh trace begins.
+  useEffect(() => {
+    arrayIdsRef.current = new Map();
+  }, [steps]);
+
+  const arrayItemsByName = useMemo(() => {
+    const result = new Map<string, ArrayItem[]>();
+    const prevAll = arrayIdsRef.current;
+    for (const [name, values] of arrays) {
+      const prev = prevAll.get(name) ?? [];
+      const usedPrev = new Set<number>();
+      const next: ArrayItem[] = new Array(values.length);
+      const valKey = (v: JsonValue) => JSON.stringify(v);
+      // Pass 1: same-index same-value preference (no movement)
+      for (let i = 0; i < values.length; i++) {
+        if (prev[i] && valKey(prev[i].value) === valKey(values[i])) {
+          usedPrev.add(i);
+          next[i] = { id: prev[i].id, value: values[i] };
+        }
+      }
+      // Pass 2: match remaining slots to any unused previous item with same value
+      for (let i = 0; i < values.length; i++) {
+        if (next[i]) continue;
+        const v = values[i];
+        let found = -1;
+        for (let j = 0; j < prev.length; j++) {
+          if (usedPrev.has(j)) continue;
+          if (valKey(prev[j].value) === valKey(v)) {
+            found = j;
+            break;
+          }
+        }
+        if (found >= 0) {
+          usedPrev.add(found);
+          next[i] = { id: prev[found].id, value: v };
+        }
+      }
+      // Pass 3: mint fresh UUIDs for anything left
+      for (let i = 0; i < values.length; i++) {
+        if (next[i]) continue;
+        const id =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `id-${name}-${i}-${Math.random().toString(36).slice(2)}`;
+        next[i] = { id, value: values[i] };
+      }
+      result.set(name, next);
+    }
+    arrayIdsRef.current = result;
+    return result;
+  }, [arrays]);
+
+
   // Scalars that are NOT pointers -> render as holding cells (if primitive) or scalar cards (if complex)
   const nonPointerScalars = scalars.filter(([n]) => !pointerScalarNames.includes(n));
   const holdingCells = nonPointerScalars
