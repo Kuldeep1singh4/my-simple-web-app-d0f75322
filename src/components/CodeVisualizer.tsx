@@ -1670,9 +1670,9 @@ export function CodeVisualizer() {
                 active={active}
                 actionColor={actionColor}
               />
-            ) : structureType === "graph" ? (
+            ) : isGraph ? (
               (() => {
-                const g = parseGraph(variables);
+                const g = parsedGraph ?? parseGraph(variables);
                 if (!g) {
                   return (
                     <div className="text-center text-gray-500 text-sm">
@@ -1683,8 +1683,18 @@ export function CodeVisualizer() {
                 const gdObj = isPlainObject(variables["graphData"])
                   ? (variables["graphData"] as { [k: string]: JsonValue })
                   : null;
-                const an = variables["activeNode"] ?? (gdObj ? gdObj["activeNode"] : undefined);
-                const vn = variables["visitedNodes"] ?? (gdObj ? gdObj["visitedNodes"] : undefined);
+                const ACTIVE_KEYS = ["activeNode", "curr", "current", "currentNode", "u", "node"];
+                const VISITED_KEYS = ["visitedNodes", "visited", "seen"];
+                let an: JsonValue | undefined = undefined;
+                for (const k of ACTIVE_KEYS) {
+                  const v = variables[k] ?? (gdObj ? gdObj[k] : undefined);
+                  if (typeof v === "string" || typeof v === "number") { an = v; break; }
+                }
+                let vn: JsonValue | undefined = undefined;
+                for (const k of VISITED_KEYS) {
+                  const v = variables[k] ?? (gdObj ? gdObj[k] : undefined);
+                  if (Array.isArray(v)) { vn = v; break; }
+                }
                 const activeNode =
                   typeof an === "string" || typeof an === "number" ? String(an) : null;
                 const visited = new Set<string>(
@@ -1695,7 +1705,7 @@ export function CodeVisualizer() {
                     : [],
                 );
                 return (
-                  <div className="w-full flex-1 min-h-0" style={{ minHeight: 280 }}>
+                  <div className="w-full h-full flex-1 min-h-0" style={{ minHeight: 280 }}>
                     <GraphVisualizer
                       nodes={g.nodes}
                       edges={g.edges}
