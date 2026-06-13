@@ -1248,13 +1248,15 @@ export function CodeVisualizer() {
 
   const variables = current?.variables ?? {};
   const entries = Object.entries(variables);
+  // Try to recover a graph from the variables regardless of structureType
+  const parsedGraph = parseGraph(variables);
   // structureType acts as the routing hint. Fall back to value-shape detection.
   const forceList = structureType === "linked_list";
   const forceTree = structureType === "binary_tree";
   const forceArray = structureType === "array";
-  const isGraph = structureType === "graph";
+  const isGraph = structureType === "graph" || (parsedGraph !== null && parsedGraph.edges.length > 0);
   // Exclude graph-only keys so they don't render as standalone arrays beneath the graph
-  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData"]);
+  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData", "visited", "seen", "curr", "current"]);
   const arrays = entries.filter(
     ([n, v]) => Array.isArray(v) && !(isGraph && GRAPH_KEYS.has(n)),
   ) as [string, JsonValue[]][];
