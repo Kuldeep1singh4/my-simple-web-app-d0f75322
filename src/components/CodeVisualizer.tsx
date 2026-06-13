@@ -810,8 +810,50 @@ function MemoryBoard({
 type GraphNode = { id: string; val?: JsonValue };
 type GraphEdge = { source: string; target: string; weight?: JsonValue };
 
+const ADJ_KEYS = ["graphData", "graph", "adj", "adjList", "adjacencyList", "adjacency_list", "neighbors", "edges_map"];
+
+function parseAdjacencyDict(
+  dict: { [k: string]: JsonValue },
+): { nodes: GraphNode[]; edges: GraphEdge[] } | null {
+  // Every value must be an array of primitives OR an array of [neighbor, weight] pairs
+  const ids = Object.keys(dict);
+  if (ids.length === 0) return null;
+  const nodeSet = new Set<string>(ids);
+  const edges: GraphEdge[] = [];
+  const seen = new Set<string>();
+  for (const src of ids) {
+    const val = dict[src];
+    if (!Array.isArray(val)) return null;
+    for (const item of val) {
+      let tgt: string | null = null;
+      let weight: JsonValue | undefined = undefined;
+      if (typeof item === "string" || typeof item === "number") {
+        tgt = String(item);
+      } else if (Array.isArray(item) && item.length >= 1) {
+        const t = item[0];
+        if (typeof t === "string" || typeof t === "number") tgt = String(t);
+        if (item.length >= 2) weight = item[1] as JsonValue;
+      } else if (isPlainObject(item)) {
+        const t = item.node ?? item.target ?? item.id ?? item.to;
+        if (typeof t === "string" || typeof t === "number") tgt = String(t);
+        weight = (item as { weight?: JsonValue }).weight;
+      }
+      if (tgt === null) return null;
+      nodeSet.add(tgt);
+      const key = src < tgt ? `${src}|${tgt}` : `${tgt}|${src}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ source: src, target: tgt, weight });
+    }
+  }
+  return {
+    nodes: Array.from(nodeSet).map((id) => ({ id })),
+    edges,
+  };
+}
+
 function parseGraph(vars: { [k: string]: JsonValue }): { nodes: GraphNode[]; edges: GraphEdge[] } | null {
-  // Allow either top-level nodes/edges OR a nested graphData object
+  // 1. Top-level nodes + edges arrays, or nested under graphData
   let rawNodes = vars["nodes"];
   let rawEdges = vars["edges"];
   const gd = vars["graphData"];
@@ -819,27 +861,48 @@ function parseGraph(vars: { [k: string]: JsonValue }): { nodes: GraphNode[]; edg
     if (Array.isArray(gd.nodes)) rawNodes = gd.nodes;
     if (Array.isArray(gd.edges)) rawEdges = gd.edges;
   }
-  if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) return null;
-  const nodes: GraphNode[] = [];
-  for (const n of rawNodes) {
-    if (isPlainObject(n) && typeof n.id !== "undefined") {
-      nodes.push({ id: String(n.id), val: (n as { val?: JsonValue }).val });
-    } else if (typeof n === "string" || typeof n === "number") {
-      nodes.push({ id: String(n) });
+  if (Array.isArray(rawNodes) && Array.isArray(rawEdges)) {
+    const nodes: GraphNode[] = [];
+    for (const n of rawNodes) {
+      if (isPlainObject(n) && typeof n.id !== "undefined") {
+        nodes.push({ id: String(n.id), val: (n as { val?: JsonValue }).val });
+      } else if (typeof n === "string" || typeof n === "number") {
+        nodes.push({ id: String(n) });
+      }
+    }
+    const edges: GraphEdge[] = [];
+    for (const e of rawEdges) {
+      if (isPlainObject(e) && typeof e.source !== "undefined" && typeof e.target !== "undefined") {
+        edges.push({
+          source: String(e.source),
+          target: String(e.target),
+          weight: (e as { weight?: JsonValue }).weight,
+        });
+      }
+    }
+    if (nodes.length > 0) return { nodes, edges };
+  }
+
+  // 2. Adjacency-dict at known keys
+  for (const key of ADJ_KEYS) {
+    const v = vars[key];
+    if (isPlainObject(v)) {
+      const res = parseAdjacencyDict(v);
+      if (res && res.nodes.length > 0) return res;
     }
   }
-  const edges: GraphEdge[] = [];
-  for (const e of rawEdges) {
-    if (isPlainObject(e) && typeof e.source !== "undefined" && typeof e.target !== "undefined") {
-      edges.push({
-        source: String(e.source),
-        target: String(e.target),
-        weight: (e as { weight?: JsonValue }).weight,
-      });
+
+  // 3. Heuristic: any top-level object variable whose every value is an array
+  for (const [, v] of Object.entries(vars)) {
+    if (!isPlainObject(v)) continue;
+    const keys = Object.keys(v);
+    if (keys.length < 2) continue;
+    if (keys.every((k) => Array.isArray((v as { [k: string]: JsonValue })[k]))) {
+      const res = parseAdjacencyDict(v as { [k: string]: JsonValue });
+      if (res && res.nodes.length > 0) return res;
     }
   }
-  if (nodes.length === 0) return null;
-  return { nodes, edges };
+  return null;
 }
 
 type PhysNode = { id: string; x: number; y: number; vx: number; vy: number };
@@ -1185,13 +1248,15 @@ export function CodeVisualizer() {
 
   const variables = current?.variables ?? {};
   const entries = Object.entries(variables);
+  // Try to recover a graph from the variables regardless of structureType
+  const parsedGraph = parseGraph(variables);
   // structureType acts as the routing hint. Fall back to value-shape detection.
   const forceList = structureType === "linked_list";
   const forceTree = structureType === "binary_tree";
   const forceArray = structureType === "array";
-  const isGraph = structureType === "graph";
+  const isGraph = structureType === "graph" || (parsedGraph !== null && parsedGraph.edges.length > 0);
   // Exclude graph-only keys so they don't render as standalone arrays beneath the graph
-  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData"]);
+  const GRAPH_KEYS = new Set(["nodes", "edges", "activeNode", "visitedNodes", "graphData", "visited", "seen", "curr", "current"]);
   const arrays = entries.filter(
     ([n, v]) => Array.isArray(v) && !(isGraph && GRAPH_KEYS.has(n)),
   ) as [string, JsonValue[]][];
@@ -1605,9 +1670,9 @@ export function CodeVisualizer() {
                 active={active}
                 actionColor={actionColor}
               />
-            ) : structureType === "graph" ? (
+            ) : isGraph ? (
               (() => {
-                const g = parseGraph(variables);
+                const g = parsedGraph ?? parseGraph(variables);
                 if (!g) {
                   return (
                     <div className="text-center text-gray-500 text-sm">
@@ -1618,8 +1683,18 @@ export function CodeVisualizer() {
                 const gdObj = isPlainObject(variables["graphData"])
                   ? (variables["graphData"] as { [k: string]: JsonValue })
                   : null;
-                const an = variables["activeNode"] ?? (gdObj ? gdObj["activeNode"] : undefined);
-                const vn = variables["visitedNodes"] ?? (gdObj ? gdObj["visitedNodes"] : undefined);
+                const ACTIVE_KEYS = ["activeNode", "curr", "current", "currentNode", "u", "node"];
+                const VISITED_KEYS = ["visitedNodes", "visited", "seen"];
+                let an: JsonValue | undefined = undefined;
+                for (const k of ACTIVE_KEYS) {
+                  const v = variables[k] ?? (gdObj ? gdObj[k] : undefined);
+                  if (typeof v === "string" || typeof v === "number") { an = v; break; }
+                }
+                let vn: JsonValue | undefined = undefined;
+                for (const k of VISITED_KEYS) {
+                  const v = variables[k] ?? (gdObj ? gdObj[k] : undefined);
+                  if (Array.isArray(v)) { vn = v; break; }
+                }
                 const activeNode =
                   typeof an === "string" || typeof an === "number" ? String(an) : null;
                 const visited = new Set<string>(
@@ -1630,7 +1705,7 @@ export function CodeVisualizer() {
                     : [],
                 );
                 return (
-                  <div className="w-full flex-1 min-h-0" style={{ minHeight: 280 }}>
+                  <div className="w-full h-full flex-1 min-h-0" style={{ minHeight: 280 }}>
                     <GraphVisualizer
                       nodes={g.nodes}
                       edges={g.edges}
