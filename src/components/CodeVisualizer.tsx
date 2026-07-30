@@ -1293,14 +1293,22 @@ export function CodeVisualizer() {
   const [playing, setPlaying] = useState(false);
   const [leftTab, setLeftTab] = useState<"code" | "console">("code");
   const [unseenConsole, setUnseenConsole] = useState(false);
+  // Bumped on every fresh run so the whole visualization subtree remounts
+  // (kills stale Framer Motion layout state, SVG refs and physics loops).
+  const [runId, setRunId] = useState(0);
   const terminalScrollRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<EditorView | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trace = useServerFn(traceCode);
 
   const current = idx >= 0 && idx < steps.length ? steps[idx] : null;
   const active = useMemo(() => parseActive(current?.activeVariables), [current]);
   const actionColor = COLORS[actionKind(current?.actionType)];
+
+  // 3-phase pedagogical timeline derived from the raw trace
+  const execSteps = useMemo(() => buildExecutionSteps(steps), [steps]);
+  const currentExec = idx >= 0 && idx < execSteps.length ? execSteps[idx] : null;
 
   const canvasStyle = {
     ["--cell-active-bg" as string]: actionColor.bg,
@@ -1309,31 +1317,71 @@ export function CodeVisualizer() {
     ["--cell-active-glow" as string]: actionColor.glow,
   } as React.CSSProperties;
 
+  // Highlight + auto-scroll the active line inside the editor
   useEffect(() => {
-    if (!editorRef.current) return;
-    editorRef.current.dispatch({
-      effects: setActiveLine.of(current ? current.line : null),
+    const view = editorRef.current;
+    if (!view) return;
+    if (!current) {
+      view.dispatch({ effects: setActiveLine.of(null) });
+      return;
+    }
+    const lineNum = Math.max(1, Math.min(current.line, view.state.doc.lines));
+    const line = view.state.doc.line(lineNum);
+    view.dispatch({
+      effects: [
+        setActiveLine.of(current.line),
+        EditorView.scrollIntoView(line.from, { y: "center" }),
+      ],
     });
   }, [current]);
 
+  // Hard reset: wipe every trace-derived piece of state and remount the canvas.
+  const resetVisualState = () => {
+    if (playTimerRef.current) {
+      clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    }
+    setPlaying(false);
+    setIdx(-1);
+    setSteps([]);
+    setComplexity(null);
+    setStructureType(null);
+    setError(null);
+    setTraceError(null);
+    setUnseenConsole(false);
+    arrayIdsRef.current = new Map();
+    setRunId((r) => r + 1);
+    editorRef.current?.dispatch({ effects: setActiveLine.of(null) });
+  };
+
+  // Editing the code or switching languages invalidates the current run.
+  useEffect(() => {
+    resetVisualState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, language]);
+
+  // Autoplay: dwell time scales with the current step's phase speed multiplier.
   useEffect(() => {
     if (!playing) return;
     if (idx >= steps.length - 1) {
       setPlaying(false);
       return;
     }
-    const t = setTimeout(() => setIdx((i) => Math.min(i + 1, steps.length - 1)), 2000);
-    return () => clearTimeout(t);
-  }, [playing, idx, steps.length]);
+    const mult = execSteps[idx]?.speedMultiplier ?? 1;
+    const delay = Math.max(320, BASE_STEP_DELAY / mult);
+    playTimerRef.current = setTimeout(
+      () => setIdx((i) => Math.min(i + 1, steps.length - 1)),
+      delay,
+    );
+    return () => {
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    };
+  }, [playing, idx, steps.length, execSteps]);
 
   const handleVisualize = async () => {
+    resetVisualState();
     setLoading(true);
-    setError(null);
-    setTraceError(null);
-    setComplexity(null);
-    setStructureType(null);
-    setPlaying(false);
-    setIdx(-1);
     try {
       const res = await trace({ data: { code, language } });
       if (res.error) {
