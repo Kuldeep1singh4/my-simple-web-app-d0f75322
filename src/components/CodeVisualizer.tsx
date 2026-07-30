@@ -123,7 +123,10 @@ const activeLineField = StateField.define<DecorationSet>({
         const lineNum = Math.max(1, Math.min(e.value, tr.state.doc.lines));
         const line = tr.state.doc.line(lineNum);
         return Decoration.set([
-          Decoration.line({ class: "cm-active-trace-line" }).range(line.from),
+          Decoration.line({
+            class: "cm-active-trace-line",
+            attributes: { "data-active-trace-line": String(lineNum) },
+          }).range(line.from),
         ]);
       }
     }
@@ -132,10 +135,45 @@ const activeLineField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// Tags every visible line container with data-line-number so the active line
+// can be located in the DOM and scrolled into view.
+const lineNumberAttributes = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = build(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = build(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+function build(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const { from, to } of view.visibleRanges) {
+    let pos = from;
+    while (pos <= to) {
+      const line = view.state.doc.lineAt(pos);
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({ attributes: { "data-line-number": String(line.number) } }),
+      );
+      pos = line.to + 1;
+    }
+  }
+  return builder.finish();
+}
+
 const lineTheme = EditorView.baseTheme({
   ".cm-active-trace-line": {
-    backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
-    boxShadow: "inset 3px 0 0 0 var(--primary)",
+    backgroundColor: "rgba(34, 211, 238, 0.16)",
+    boxShadow: "inset 4px 0 0 0 #22d3ee",
+    transition: "background-color 200ms ease",
   },
 });
 
