@@ -1783,15 +1783,32 @@ export function CodeVisualizer() {
             </div>
           )}
 
-          {/* Step counter */}
+          {/* Step counter + phase */}
           {steps.length > 0 && (
-            <div className="absolute top-2 left-2 z-30 px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono text-gray-700 bg-white/80 border border-gray-200 shadow-sm">
-              Step {idx + 1} / {steps.length}
+            <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+              <div className="px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono text-gray-700 bg-white/80 border border-gray-200 shadow-sm">
+                Step {idx + 1} / {steps.length}
+              </div>
+              {currentExec && (
+                <div
+                  className="px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono border shadow-sm"
+                  style={
+                    currentExec.phase === "MIDDLE"
+                      ? { background: "#FFF3B0", borderColor: "#333333", color: "#1a1a1a" }
+                      : currentExec.phase === "END"
+                        ? { background: "#C8E6C9", borderColor: "#333333", color: "#1a1a1a" }
+                        : { background: "#BBDEFB", borderColor: "#333333", color: "#1a1a1a" }
+                  }
+                >
+                  {PHASE_LABELS[currentExec.phase]}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Centered stage content */}
+          {/* Centered stage content — keyed on runId so each run mounts clean */}
           <div
+            key={runId}
             className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full"
             style={{
               fontSize: "clamp(0.7rem, 1.6vmin, 1rem)",
