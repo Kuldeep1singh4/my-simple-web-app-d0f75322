@@ -1960,6 +1960,11 @@ export function CodeVisualizer() {
               className="absolute left-0 right-0 bottom-0 z-20 px-3 py-2 border-t border-gray-200 bg-white/95 backdrop-blur-sm"
               style={{ pointerEvents: "none" }}
             >
+              {currentExec && (
+                <div className="text-[10px] uppercase tracking-wider font-mono font-bold text-gray-500 text-center mb-0.5">
+                  {currentExec.title}
+                </div>
+              )}
               <div className="text-xs md:text-sm text-gray-800 text-center leading-snug line-clamp-2">
                 <span className="font-mono font-semibold text-gray-500 mr-2">
                   Line {current.line}
