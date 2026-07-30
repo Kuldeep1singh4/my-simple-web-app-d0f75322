@@ -4,8 +4,19 @@ import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { java } from "@codemirror/lang-java";
 import { cpp } from "@codemirror/lang-cpp";
-import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
-import { StateField, StateEffect, type Extension } from "@codemirror/state";
+import {
+  EditorView,
+  Decoration,
+  ViewPlugin,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
+import {
+  StateField,
+  StateEffect,
+  RangeSetBuilder,
+  type Extension,
+} from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Terminal as TerminalIcon } from "lucide-react";
