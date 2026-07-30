@@ -1711,7 +1711,12 @@ export function CodeVisualizer() {
               value={code}
               onChange={setCode}
               theme="dark"
-              extensions={[languageExtension(language), activeLineField, lineTheme]}
+              extensions={[
+                languageExtension(language),
+                activeLineField,
+                lineNumberAttributes,
+                lineTheme,
+              ]}
               basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
               onCreateEditor={(view) => {
                 editorRef.current = view;
