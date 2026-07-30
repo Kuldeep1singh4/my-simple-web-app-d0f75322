@@ -4,8 +4,19 @@ import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { java } from "@codemirror/lang-java";
 import { cpp } from "@codemirror/lang-cpp";
-import { EditorView, Decoration, type DecorationSet } from "@codemirror/view";
-import { StateField, StateEffect, type Extension } from "@codemirror/state";
+import {
+  EditorView,
+  Decoration,
+  ViewPlugin,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
+import {
+  StateField,
+  StateEffect,
+  RangeSetBuilder,
+  type Extension,
+} from "@codemirror/state";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { Play, Pause, StepForward, StepBack, Sparkles, Loader2, Terminal as TerminalIcon } from "lucide-react";
@@ -112,7 +123,10 @@ const activeLineField = StateField.define<DecorationSet>({
         const lineNum = Math.max(1, Math.min(e.value, tr.state.doc.lines));
         const line = tr.state.doc.line(lineNum);
         return Decoration.set([
-          Decoration.line({ class: "cm-active-trace-line" }).range(line.from),
+          Decoration.line({
+            class: "cm-active-trace-line",
+            attributes: { "data-active-trace-line": String(lineNum) },
+          }).range(line.from),
         ]);
       }
     }
@@ -121,10 +135,45 @@ const activeLineField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// Tags every visible line container with data-line-number so the active line
+// can be located in the DOM and scrolled into view.
+const lineNumberAttributes = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = build(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = build(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+function build(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const { from, to } of view.visibleRanges) {
+    let pos = from;
+    while (pos <= to) {
+      const line = view.state.doc.lineAt(pos);
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({ attributes: { "data-line-number": String(line.number) } }),
+      );
+      pos = line.to + 1;
+    }
+  }
+  return builder.finish();
+}
+
 const lineTheme = EditorView.baseTheme({
   ".cm-active-trace-line": {
-    backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
-    boxShadow: "inset 3px 0 0 0 var(--primary)",
+    backgroundColor: "rgba(34, 211, 238, 0.16)",
+    boxShadow: "inset 4px 0 0 0 #22d3ee",
+    transition: "background-color 200ms ease",
   },
 });
 
@@ -1162,6 +1211,71 @@ function GraphVisualizer({
   );
 }
 
+// ---------- Pedagogical 3-phase execution engine ----------
+type Phase = "START" | "MIDDLE" | "END";
+
+type ExecutionStep = {
+  stepIndex: number;
+  phase: Phase;
+  line: number;
+  speedMultiplier: number;
+  title: string;
+  detail: string;
+  isFastForward: boolean;
+};
+
+// Base dwell time for a 1x step. MIDDLE steps divide this by their multiplier.
+const BASE_STEP_DELAY = 2200;
+// How many steps at each end get the slow, fully-narrated treatment.
+const PHASE_EDGE = 3;
+
+const ACTION_TITLES: Record<string, string> = {
+  init: "Initialising",
+  compare: "Comparing values",
+  swap: "Swapping elements",
+  insert: "Inserting value",
+  read: "Reading value",
+  write: "Writing value",
+  success: "Condition met",
+  error: "Error",
+  return: "Returning",
+  "fast-forward": "Fast-forwarding iterations",
+};
+
+function buildExecutionSteps(steps: TraceStep[]): ExecutionStep[] {
+  const n = steps.length;
+  return steps.map((s, i) => {
+    const isFastForward = s.actionType === "fast-forward";
+    let phase: Phase;
+    if (i < PHASE_EDGE) phase = "START";
+    else if (i >= n - PHASE_EDGE) phase = "END";
+    else phase = "MIDDLE";
+
+    // START teaches slowly, MIDDLE accelerates through the repetitive core,
+    // END slows back down so the result lands.
+    let speedMultiplier = 1;
+    if (phase === "MIDDLE") speedMultiplier = isFastForward ? 3 : 2;
+    if (phase === "START") speedMultiplier = 0.85;
+
+    return {
+      stepIndex: i,
+      phase,
+      line: s.line,
+      speedMultiplier,
+      title:
+        (typeof s.actionType === "string" ? ACTION_TITLES[s.actionType] : undefined) ??
+        (phase === "END" ? "Wrapping up" : "Executing"),
+      detail: s.explanation,
+      isFastForward,
+    };
+  });
+}
+
+const PHASE_LABELS: Record<Phase, string> = {
+  START: "Setting the stage",
+  MIDDLE: "Fast-forwarding iterations…",
+  END: "Final result",
+};
 
 // ---------- Main ----------
 export function CodeVisualizer() {
@@ -1179,14 +1293,22 @@ export function CodeVisualizer() {
   const [playing, setPlaying] = useState(false);
   const [leftTab, setLeftTab] = useState<"code" | "console">("code");
   const [unseenConsole, setUnseenConsole] = useState(false);
+  // Bumped on every fresh run so the whole visualization subtree remounts
+  // (kills stale Framer Motion layout state, SVG refs and physics loops).
+  const [runId, setRunId] = useState(0);
   const terminalScrollRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<EditorView | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const playTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trace = useServerFn(traceCode);
 
   const current = idx >= 0 && idx < steps.length ? steps[idx] : null;
   const active = useMemo(() => parseActive(current?.activeVariables), [current]);
   const actionColor = COLORS[actionKind(current?.actionType)];
+
+  // 3-phase pedagogical timeline derived from the raw trace
+  const execSteps = useMemo(() => buildExecutionSteps(steps), [steps]);
+  const currentExec = idx >= 0 && idx < execSteps.length ? execSteps[idx] : null;
 
   const canvasStyle = {
     ["--cell-active-bg" as string]: actionColor.bg,
@@ -1195,31 +1317,71 @@ export function CodeVisualizer() {
     ["--cell-active-glow" as string]: actionColor.glow,
   } as React.CSSProperties;
 
+  // Highlight + auto-scroll the active line inside the editor
   useEffect(() => {
-    if (!editorRef.current) return;
-    editorRef.current.dispatch({
-      effects: setActiveLine.of(current ? current.line : null),
+    const view = editorRef.current;
+    if (!view) return;
+    if (!current) {
+      view.dispatch({ effects: setActiveLine.of(null) });
+      return;
+    }
+    const lineNum = Math.max(1, Math.min(current.line, view.state.doc.lines));
+    const line = view.state.doc.line(lineNum);
+    view.dispatch({
+      effects: [
+        setActiveLine.of(current.line),
+        EditorView.scrollIntoView(line.from, { y: "center" }),
+      ],
     });
   }, [current]);
 
+  // Hard reset: wipe every trace-derived piece of state and remount the canvas.
+  const resetVisualState = () => {
+    if (playTimerRef.current) {
+      clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    }
+    setPlaying(false);
+    setIdx(-1);
+    setSteps([]);
+    setComplexity(null);
+    setStructureType(null);
+    setError(null);
+    setTraceError(null);
+    setUnseenConsole(false);
+    arrayIdsRef.current = new Map();
+    setRunId((r) => r + 1);
+    editorRef.current?.dispatch({ effects: setActiveLine.of(null) });
+  };
+
+  // Editing the code or switching languages invalidates the current run.
+  useEffect(() => {
+    resetVisualState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, language]);
+
+  // Autoplay: dwell time scales with the current step's phase speed multiplier.
   useEffect(() => {
     if (!playing) return;
     if (idx >= steps.length - 1) {
       setPlaying(false);
       return;
     }
-    const t = setTimeout(() => setIdx((i) => Math.min(i + 1, steps.length - 1)), 2000);
-    return () => clearTimeout(t);
-  }, [playing, idx, steps.length]);
+    const mult = execSteps[idx]?.speedMultiplier ?? 1;
+    const delay = Math.max(320, BASE_STEP_DELAY / mult);
+    playTimerRef.current = setTimeout(
+      () => setIdx((i) => Math.min(i + 1, steps.length - 1)),
+      delay,
+    );
+    return () => {
+      if (playTimerRef.current) clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    };
+  }, [playing, idx, steps.length, execSteps]);
 
   const handleVisualize = async () => {
+    resetVisualState();
     setLoading(true);
-    setError(null);
-    setTraceError(null);
-    setComplexity(null);
-    setStructureType(null);
-    setPlaying(false);
-    setIdx(-1);
     try {
       const res = await trace({ data: { code, language } });
       if (res.error) {
@@ -1549,7 +1711,12 @@ export function CodeVisualizer() {
               value={code}
               onChange={setCode}
               theme="dark"
-              extensions={[languageExtension(language), activeLineField, lineTheme]}
+              extensions={[
+                languageExtension(language),
+                activeLineField,
+                lineNumberAttributes,
+                lineTheme,
+              ]}
               basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
               onCreateEditor={(view) => {
                 editorRef.current = view;
@@ -1616,15 +1783,32 @@ export function CodeVisualizer() {
             </div>
           )}
 
-          {/* Step counter */}
+          {/* Step counter + phase */}
           {steps.length > 0 && (
-            <div className="absolute top-2 left-2 z-30 px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono text-gray-700 bg-white/80 border border-gray-200 shadow-sm">
-              Step {idx + 1} / {steps.length}
+            <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+              <div className="px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono text-gray-700 bg-white/80 border border-gray-200 shadow-sm">
+                Step {idx + 1} / {steps.length}
+              </div>
+              {currentExec && (
+                <div
+                  className="px-2.5 py-1 rounded-full text-[10px] md:text-[11px] font-mono border shadow-sm"
+                  style={
+                    currentExec.phase === "MIDDLE"
+                      ? { background: "#FFF3B0", borderColor: "#333333", color: "#1a1a1a" }
+                      : currentExec.phase === "END"
+                        ? { background: "#C8E6C9", borderColor: "#333333", color: "#1a1a1a" }
+                        : { background: "#BBDEFB", borderColor: "#333333", color: "#1a1a1a" }
+                  }
+                >
+                  {PHASE_LABELS[currentExec.phase]}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Centered stage content */}
+          {/* Centered stage content — keyed on runId so each run mounts clean */}
           <div
+            key={runId}
             className="relative z-10 flex flex-col items-center justify-center gap-4 w-full max-h-full"
             style={{
               fontSize: "clamp(0.7rem, 1.6vmin, 1rem)",
@@ -1776,6 +1960,11 @@ export function CodeVisualizer() {
               className="absolute left-0 right-0 bottom-0 z-20 px-3 py-2 border-t border-gray-200 bg-white/95 backdrop-blur-sm"
               style={{ pointerEvents: "none" }}
             >
+              {currentExec && (
+                <div className="text-[10px] uppercase tracking-wider font-mono font-bold text-gray-500 text-center mb-0.5">
+                  {currentExec.title}
+                </div>
+              )}
               <div className="text-xs md:text-sm text-gray-800 text-center leading-snug line-clamp-2">
                 <span className="font-mono font-semibold text-gray-500 mr-2">
                   Line {current.line}
