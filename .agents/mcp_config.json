@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "google-developer-knowledge": {
+      "serverUrl": "https://developer-knowledge.googleapis.com/mcp",
+      "authProviderType": "google_credentials"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-chrome-devtools"]
+    }
+  }
+}
+
